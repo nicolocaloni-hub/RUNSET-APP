@@ -1,0 +1,7 @@
+{
+  "name": "RunSet - Cinema Logistics",
+  "description": "A map-centric logistics application for film sets, designed for Producers and Runners to manage locations, crew, and immediate communication efficiently.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
