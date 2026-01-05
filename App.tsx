@@ -4,22 +4,23 @@ import { UserRole, SetPoint, Person, Location } from './types';
 import RoleSelection from './components/RoleSelection';
 import RunnerSelection from './components/RunnerSelection';
 import MainLayout from './components/MainLayout';
-import IntroSplash from './components/IntroSplash';
 import AccessGate from './components/AccessGate';
 import { NotificationService } from './services/NotificationService';
 import { translations, Language, TranslationKey } from './translations';
 
-interface LanguageContextType {
+interface AppContextType {
   language: Language;
   setLanguage: (lang: Language) => void;
+  mapTheme: 'light' | 'dark';
+  setMapTheme: (theme: 'light' | 'dark') => void;
   t: (key: TranslationKey, params?: Record<string, string>) => string;
 }
 
-const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
+const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const useLanguage = () => {
-  const context = useContext(LanguageContext);
-  if (!context) throw new Error("useLanguage must be used within LanguageProvider");
+  const context = useContext(AppContext);
+  if (!context) throw new Error("useAppContext must be used within AppProvider");
   return context;
 };
 
@@ -28,18 +29,13 @@ const App: React.FC = () => {
     return (localStorage.getItem('runset_lang') as Language) || 'it';
   });
 
-  const [showIntro, setShowIntro] = useState(() => {
-    return !sessionStorage.getItem('runset_intro_seen');
+  const [mapTheme, setMapThemeState] = useState<'light' | 'dark'>(() => {
+    return (localStorage.getItem('runset_map_theme') as 'light' | 'dark') || 'dark';
   });
 
   const [isUnlocked, setIsUnlocked] = useState(() => {
     return localStorage.getItem('runset_master_unlocked') === 'true';
   });
-
-  const handleFinishIntro = () => {
-    setShowIntro(false);
-    sessionStorage.setItem('runset_intro_seen', 'true');
-  };
 
   const handleUnlock = () => {
     setIsUnlocked(true);
@@ -48,6 +44,11 @@ const App: React.FC = () => {
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
     localStorage.setItem('runset_lang', lang);
+  };
+
+  const setMapTheme = (theme: 'light' | 'dark') => {
+    setMapThemeState(theme);
+    localStorage.setItem('runset_map_theme', theme);
   };
 
   const t = (key: TranslationKey, params?: Record<string, string>): string => {
@@ -77,26 +78,28 @@ const App: React.FC = () => {
   
   const [people, setPeople] = useState<Person[]>(() => {
     const saved = localStorage.getItem('runset_people');
-    if (!saved) return [
-      { id: 'r1', name: 'Luca Rossi', role: 'Runner Lead', phone: '+393331234567', initials: 'LR', location: { lat: 41.9028, lng: 12.4964 }, category: 'RUNNER' },
-      { id: 'c1', name: 'Sofia Verdi', role: 'DoP', phone: '+393339988776', initials: 'SV', location: { lat: 41.8900, lng: 12.4922 }, category: 'TROUPE', assignedRunnerId: 'r1' },
-    ];
-    return JSON.parse(saved);
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [externalNewSet, setExternalNewSet] = useState<SetPoint | null>(null);
   const watchId = useRef<number | null>(null);
 
   useEffect(() => {
-    localStorage.setItem('runset_sets', JSON.stringify(sets));
+    try {
+      localStorage.setItem('runset_sets', JSON.stringify(sets));
+    } catch (e) { console.error("Storage error", e); }
   }, [sets]);
 
   useEffect(() => {
-    localStorage.setItem('runset_people', JSON.stringify(people));
+    try {
+      localStorage.setItem('runset_people', JSON.stringify(people));
+    } catch (e) { console.error("Storage error", e); }
   }, [people]);
 
   useEffect(() => {
-    localStorage.setItem('runset_producer_info', JSON.stringify(producerInfo));
+    try {
+      localStorage.setItem('runset_producer_info', JSON.stringify(producerInfo));
+    } catch (e) { console.error("Storage error", e); }
   }, [producerInfo]);
 
   useEffect(() => {
@@ -151,6 +154,11 @@ const App: React.FC = () => {
       },
       (update) => {
         updatePersonLocation(update.runnerId, update.location, true);
+      },
+      (pickup) => {
+        setPeople(prev => prev.map(p => 
+          p.id === pickup.personId ? { ...p, isRecovered: true } : p
+        ));
       }
     );
   }, [updatePersonLocation]);
@@ -165,7 +173,13 @@ const App: React.FC = () => {
   };
 
   const handleAddPerson = (person: Person) => {
-    setPeople(prev => [...prev, person]);
+    setPeople(prev => {
+      const exists = prev.find(p => p.id === person.id);
+      if (exists) {
+        return prev.map(p => p.id === person.id ? person : p);
+      }
+      return [...prev, person];
+    });
   };
 
   const handleDeletePerson = (id: string) => {
@@ -183,11 +197,10 @@ const App: React.FC = () => {
   };
 
   return (
-    <LanguageContext.Provider value={{ language, setLanguage, t }}>
-      {showIntro && <IntroSplash onFinish={handleFinishIntro} />}
-      {!showIntro && !isUnlocked && <AccessGate onUnlock={handleUnlock} />}
-      
-      {isUnlocked && (
+    <AppContext.Provider value={{ language, setLanguage, mapTheme, setMapTheme, t }}>
+      {!isUnlocked ? (
+        <AccessGate onUnlock={handleUnlock} />
+      ) : (
         <>
           {!role ? (
             <RoleSelection onSelect={handleSelectRole} />
@@ -215,7 +228,7 @@ const App: React.FC = () => {
           )}
         </>
       )}
-    </LanguageContext.Provider>
+    </AppContext.Provider>
   );
 };
 

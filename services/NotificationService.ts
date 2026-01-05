@@ -16,6 +16,12 @@ export interface LocationUpdate {
   location: Location;
 }
 
+export interface PickupConfirmation {
+  runnerName: string;
+  personName: string;
+  personId: string;
+}
+
 export class NotificationService {
   private static channel = new BroadcastChannel(CHANNEL_NAME);
 
@@ -59,12 +65,20 @@ export class NotificationService {
     });
   }
 
+  static sendPickupUpdate(data: PickupConfirmation) {
+    this.channel.postMessage({
+      type: 'PICKUP_DONE',
+      pickup: data
+    });
+    this.showNativeNotification(`Recupero Completato ✅`, `${data.personName} è stato recuperato da ${data.runnerName}.`);
+  }
+
   static showNativeNotification(title: string, body: string, tag?: string) {
     if (Notification.permission !== 'granted') return;
 
     const notification = new Notification(title, {
       body,
-      icon: '/favicon.ico',
+      icon: 'https://cdn-icons-png.flaticon.com/512/3710/3710274.png',
       tag: tag || 'runset-notif',
       badge: 'https://cdn-icons-png.flaticon.com/512/3710/3710274.png'
     });
@@ -78,10 +92,11 @@ export class NotificationService {
   static listenForMessages(
     onNewSet: (set: SetPoint) => void,
     onAlert: (alert: RunnerAlert) => void,
-    onLocationUpdate: (update: LocationUpdate) => void
+    onLocationUpdate: (update: LocationUpdate) => void,
+    onPickup: (data: PickupConfirmation) => void
   ) {
     this.channel.onmessage = (event) => {
-      const { type, set, alert, update } = event.data;
+      const { type, set, alert, update, pickup } = event.data;
 
       switch (type) {
         case 'NEW_SET':
@@ -95,6 +110,9 @@ export class NotificationService {
           break;
         case 'LOCATION_UPDATE':
           onLocationUpdate(update);
+          break;
+        case 'PICKUP_DONE':
+          onPickup(pickup);
           break;
       }
     };

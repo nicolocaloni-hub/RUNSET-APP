@@ -12,7 +12,7 @@ export const translations = {
     enter_passcode: "Inserisci il codice a 4 cifre",
     access_denied: "Accesso Negato",
     back: "Indietro",
-    version: "v1.1.0 • Accesso Protetto",
+    version: "v1.1.1 • Accesso Protetto",
     skip: "Salta",
     
     // Access Gate
@@ -31,6 +31,17 @@ export const translations = {
     logout: "Log Out",
     producer_name_placeholder: "Nome e Cognome Produttore",
     producer_phone_placeholder: "Numero di Telefono",
+    settings: "Impostazioni",
+    map_theme: "Tema Mappa",
+    theme_light: "Chiaro",
+    theme_dark: "Scuro",
+    close_session: "Chiudi Sessione",
+    close_session_desc: "ATTENZIONE: Questa azione cancellerà DEFINITIVAMENTE tutti i dati (set, runner, troupe) e resetterà l'app per una nuova produzione.",
+    
+    // Map Context Menu
+    add_here: "Aggiungi qui",
+    add_set_option: "Nuovo Set Point",
+    add_person_option: "Nuovo Contatto",
     
     // Map & Info
     details: "DETTAGLI",
@@ -66,6 +77,7 @@ export const translations = {
     full_name: "Nome Completo",
     role_dept: "Ruolo / Reparto",
     phone: "Telefono",
+    start_address: "Indirizzo di Partenza",
     assign_runner: "Assegna a Runner",
     new_set: "Nuovo Set",
     set_name: "Nome Set",
@@ -78,7 +90,13 @@ export const translations = {
     // Runner Selection
     who_are_you: "Chi sei?",
     select_from_list: "Seleziona il tuo nome dalla lista runner",
-    no_runners_config: "Nessun runner configurato dal produttore."
+    no_runners_config: "Nessun runner configurato dal produttore.",
+
+    // Runner Filter
+    filter_runners: "Filtra Runner",
+    show_all: "Mostra Tutti",
+    viewing_all: "Vista: Globale",
+    viewing_runner: "Vista: {name}"
   },
   en: {
     app_name: "RUNSET",
@@ -92,7 +110,7 @@ export const translations = {
     enter_passcode: "Enter the 4-digit code",
     access_denied: "Access Denied",
     back: "Back",
-    version: "v1.1.0 • Protected Access",
+    version: "v1.1.1 • Protected Access",
     skip: "Skip",
 
     // Access Gate
@@ -111,7 +129,18 @@ export const translations = {
     logout: "Log Out",
     producer_name_placeholder: "Producer Name",
     producer_phone_placeholder: "Phone Number",
+    settings: "Settings",
+    map_theme: "Map Theme",
+    theme_light: "Light",
+    theme_dark: "Dark",
+    close_session: "Close Session",
+    close_session_desc: "WARNING: This will PERMANENTLY delete all data (sets, runners, crew) and reset the app for a new production.",
     
+    // Map Context Menu
+    add_here: "Add here",
+    add_set_option: "New Set Point",
+    add_person_option: "New Contact",
+
     // Map & Info
     details: "DETAILS",
     contact: "CONTACT",
@@ -146,6 +175,7 @@ export const translations = {
     full_name: "Full Name",
     role_dept: "Role / Dept",
     phone: "Phone",
+    start_address: "Starting Address",
     assign_runner: "Assign to Runner",
     new_set: "New Set",
     set_name: "Set Name",
@@ -158,7 +188,13 @@ export const translations = {
     // Runner Selection
     who_are_you: "Who are you?",
     select_from_list: "Select your name from the runner list",
-    no_runners_config: "No runners configured by the producer."
+    no_runners_config: "No runners configured by the producer.",
+
+    // Runner Filter
+    filter_runners: "Filter Runners",
+    show_all: "Show All",
+    viewing_all: "View: All",
+    viewing_runner: "View: {name}"
   }
 };
 

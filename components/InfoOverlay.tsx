@@ -18,7 +18,17 @@ const InfoOverlay: React.FC<InfoOverlayProps> = ({ entity, onClose, onDelete, ro
 
   const handleDirections = () => {
     const coords = isSet(entity) ? entity.location : (entity as Person).location;
-    window.open(`https://www.google.com/maps/dir/?api=1&destination=${coords.lat},${coords.lng}`, '_blank');
+    const address = entity.address;
+
+    // Se abbiamo l'indirizzo testuale scritto a mano, usiamo quello per Google Maps
+    // perché è più preciso del reverse-geocoding via coordinate
+    if (address && address.trim().length > 0) {
+      const query = encodeURIComponent(`${address}, Italia`);
+      window.open(`https://www.google.com/maps/dir/?api=1&destination=${query}`, '_blank');
+    } else {
+      // Fallback alle coordinate se l'indirizzo manca
+      window.open(`https://www.google.com/maps/dir/?api=1&destination=${coords.lat},${coords.lng}`, '_blank');
+    }
   };
 
   const handleCall = () => {

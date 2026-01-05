@@ -26,9 +26,11 @@ export interface Person {
   phone: string;
   initials: string;
   location: Location;
+  address?: string; // Indirizzo di partenza/locazione
   category: 'RUNNER' | 'ACTOR' | 'TROUPE';
   assignedRunnerId?: string; // ID del runner responsabile
   isLive?: boolean; // Se il runner sta trasmettendo la posizione
+  isRecovered?: boolean; // Se la persona è stata recuperata dal runner
 }
 
 export interface AppState {

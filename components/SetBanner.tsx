@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { SetPoint, Location } from '../types';
-import { X, Save, MapPin, Phone, User, FileText, Crosshair } from 'lucide-react';
+import { X, Save, MapPin, Phone, User, FileText, Crosshair, Loader2 } from 'lucide-react';
 import { useLanguage } from '../App';
 
 interface SetBannerProps {
@@ -12,6 +12,7 @@ interface SetBannerProps {
 
 const SetBanner: React.FC<SetBannerProps> = ({ onSave, onCancel, initialLocation }) => {
   const { t } = useLanguage();
+  const [isGeocoding, setIsGeocoding] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     address: '',
@@ -20,9 +21,39 @@ const SetBanner: React.FC<SetBannerProps> = ({ onSave, onCancel, initialLocation
     note: ''
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const geocodeAddress = async (address: string): Promise<Location | null> => {
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`);
+      const data = await response.json();
+      if (data && data.length > 0) {
+        return {
+          lat: parseFloat(data[0].lat),
+          lng: parseFloat(data[0].lon)
+        };
+      }
+    } catch (error) {
+      console.error("Geocoding error:", error);
+    }
+    return null;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.address) return;
+
+    setIsGeocoding(true);
+    let finalLocation = initialLocation;
+
+    if (!finalLocation && formData.address) {
+      const coords = await geocodeAddress(formData.address);
+      if (coords) {
+        finalLocation = coords;
+      }
+    }
+
+    if (!finalLocation) {
+      finalLocation = { lat: 41.9028, lng: 12.4964 }; // Roma Centro
+    }
 
     const newSet: SetPoint = {
       id: Math.random().toString(36).substr(2, 9),
@@ -31,13 +62,11 @@ const SetBanner: React.FC<SetBannerProps> = ({ onSave, onCancel, initialLocation
       managerName: formData.manager,
       phone: formData.phone,
       note: formData.note,
-      location: initialLocation || {
-        lat: 41.8 + Math.random() * 0.2,
-        lng: 12.4 + Math.random() * 0.2
-      }
+      location: finalLocation
     };
 
     onSave(newSet);
+    setIsGeocoding(false);
   };
 
   return (
@@ -85,7 +114,7 @@ const SetBanner: React.FC<SetBannerProps> = ({ onSave, onCancel, initialLocation
                 type="text" 
                 value={formData.address}
                 onChange={e => setFormData(prev => ({ ...prev, address: e.target.value }))}
-                placeholder="Via del Corso, 1"
+                placeholder="Via del Corso, 1, Roma"
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3.5 px-4 text-sm focus:outline-none focus:border-yellow-500 transition-colors"
               />
             </div>
@@ -136,10 +165,11 @@ const SetBanner: React.FC<SetBannerProps> = ({ onSave, onCancel, initialLocation
           <div className="pt-2">
             <button 
               type="submit"
-              className="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-yellow-500/10"
+              disabled={isGeocoding}
+              className="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-yellow-500/10 disabled:opacity-50"
             >
-              <Save size={20} />
-              {t('save_set')}
+              {isGeocoding ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
+              {isGeocoding ? "Verifica indirizzo..." : t('save_set')}
             </button>
           </div>
         </form>

@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { UserRole, SetPoint, Person } from '../types';
-import { X, Truck, Users, LogOut, Trash2, ChevronRight, PlusCircle, User, Phone, Star } from 'lucide-react';
+import { X, Truck, Users, LogOut, Trash2, ChevronRight, PlusCircle, User, Phone, Star, Clapperboard } from 'lucide-react';
 import { useLanguage } from '../App';
 
 interface SidebarProps {
@@ -87,11 +87,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           <section>
             <div className="flex items-center justify-between mb-4 px-2">
               <div className="flex items-center gap-2 text-zinc-400">
-                <img 
-                  src="https://cdn-icons-png.flaticon.com/512/100/100513.png" 
-                  className="w-4 h-4 grayscale invert brightness-200" 
-                  alt="Sets" 
-                />
+                <Clapperboard size={16} />
                 <span className="text-xs font-bold uppercase tracking-widest">{t('sets')}</span>
               </div>
             </div>
