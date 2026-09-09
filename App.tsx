@@ -1,235 +1,324 @@
-
-import React, { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react';
-import { UserRole, SetPoint, Person, Location } from './types';
-import RoleSelection from './components/RoleSelection';
-import RunnerSelection from './components/RunnerSelection';
-import MainLayout from './components/MainLayout';
-import AccessGate from './components/AccessGate';
-import { NotificationService } from './services/NotificationService';
-import { translations, Language, TranslationKey } from './translations';
-
-interface AppContextType {
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
+import { UserRole } from "./types";
+import { Snapshot } from "./services/protocol";
+import AccessGate from "./components/AccessGate";
+import MainLayout from "./components/MainLayout";
+import { api, ApiError } from "./services/api";
+import { NotificationService } from "./services/NotificationService";
+import { translations, Language, TranslationKey } from "./translations";
+interface Context {
   language: Language;
-  setLanguage: (lang: Language) => void;
-  mapTheme: 'light' | 'dark';
-  setMapTheme: (theme: 'light' | 'dark') => void;
+  setLanguage: (l: Language) => void;
+  mapTheme: "light" | "dark";
+  setMapTheme: (v: "light" | "dark") => void;
   t: (key: TranslationKey, params?: Record<string, string>) => string;
 }
-
-const AppContext = createContext<AppContextType | undefined>(undefined);
-
-export const useLanguage = () => {
+const AppContext = createContext<Context | undefined>(undefined);
+export function useLanguage() {
   const context = useContext(AppContext);
-  if (!context) throw new Error("useAppContext must be used within AppProvider");
+  if (!context) throw new Error("Missing App provider");
   return context;
-};
-
-const App: React.FC = () => {
-  const [language, setLanguageState] = useState<Language>(() => {
-    return (localStorage.getItem('runset_lang') as Language) || 'it';
-  });
-
-  const [mapTheme, setMapThemeState] = useState<'light' | 'dark'>(() => {
-    return (localStorage.getItem('runset_map_theme') as 'light' | 'dark') || 'dark';
-  });
-
-  const [isUnlocked, setIsUnlocked] = useState(() => {
-    return localStorage.getItem('runset_master_unlocked') === 'true';
-  });
-
-  const handleUnlock = () => {
-    setIsUnlocked(true);
-  };
-
-  const setLanguage = (lang: Language) => {
-    setLanguageState(lang);
-    localStorage.setItem('runset_lang', lang);
-  };
-
-  const setMapTheme = (theme: 'light' | 'dark') => {
-    setMapThemeState(theme);
-    localStorage.setItem('runset_map_theme', theme);
-  };
-
-  const t = (key: TranslationKey, params?: Record<string, string>): string => {
-    let str = translations[language][key] || key;
-    if (params) {
-      Object.entries(params).forEach(([k, v]) => {
-        str = str.replace(`{${k}}`, v);
-      });
-    }
-    return str;
-  };
-
-  const [role, setRole] = useState<UserRole | null>(null);
-  const [activeRunnerId, setActiveRunnerId] = useState<string | null>(() => {
-    return localStorage.getItem('runset_active_runner');
-  });
-  
-  const [producerInfo, setProducerInfo] = useState(() => {
-    const saved = localStorage.getItem('runset_producer_info');
-    return saved ? JSON.parse(saved) : { name: '', phone: '' };
-  });
-
-  const [sets, setSets] = useState<SetPoint[]>(() => {
-    const saved = localStorage.getItem('runset_sets');
-    return saved ? JSON.parse(saved) : [];
-  });
-  
-  const [people, setPeople] = useState<Person[]>(() => {
-    const saved = localStorage.getItem('runset_people');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const [externalNewSet, setExternalNewSet] = useState<SetPoint | null>(null);
-  const watchId = useRef<number | null>(null);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('runset_sets', JSON.stringify(sets));
-    } catch (e) { console.error("Storage error", e); }
-  }, [sets]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('runset_people', JSON.stringify(people));
-    } catch (e) { console.error("Storage error", e); }
-  }, [people]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('runset_producer_info', JSON.stringify(producerInfo));
-    } catch (e) { console.error("Storage error", e); }
-  }, [producerInfo]);
-
-  useEffect(() => {
-    if (activeRunnerId) {
-      localStorage.setItem('runset_active_runner', activeRunnerId);
-    } else {
-      localStorage.removeItem('runset_active_runner');
-    }
-  }, [activeRunnerId]);
-
-  useEffect(() => {
-    if (role === UserRole.RUNNER && activeRunnerId) {
-      if ('geolocation' in navigator) {
-        watchId.current = navigator.geolocation.watchPosition(
-          (position) => {
-            const newLoc: Location = {
-              lat: position.coords.latitude,
-              lng: position.coords.longitude
-            };
-            NotificationService.sendLocationUpdate(activeRunnerId, newLoc);
-            updatePersonLocation(activeRunnerId, newLoc, true);
-          },
-          (error) => console.error("Geolocation error:", error),
-          { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+}
+function preference(key: string, fallback: string) {
+  try {
+    return localStorage.getItem(key) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+export default function App() {
+  const [language, setLang] = useState<Language>(() =>
+    preference("runset_lang", "it") === "en" ? "en" : "it",
+  );
+  const [mapTheme, setTheme] = useState<"light" | "dark">(() =>
+    preference("runset_map_theme", "dark") === "light" ? "light" : "dark",
+  );
+  const [data, setData] = useState<Snapshot | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [online, setOnline] = useState(false);
+  const [error, setError] = useState("");
+  const [sharing, setSharing] = useState(false);
+  const [gpsStatus, setGpsStatus] = useState("GPS spento");
+  const [now, setNow] = useState(Date.now());
+  const dataRef = useRef<Snapshot | null>(null);
+  const seen = useRef(new Set<string>());
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const epoch = useRef(0);
+  const exiting = useRef(false);
+  const accept = useCallback((next: Snapshot) => {
+    if (
+      dataRef.current &&
+      next.session.roomCode === dataRef.current.session.roomCode &&
+      next.version < dataRef.current.version
+    )
+      return;
+    const initial =
+      !dataRef.current ||
+      dataRef.current.session.roomCode !== next.session.roomCode;
+    if (initial) seen.current.clear();
+    for (const e of next.events) {
+      if (!initial && !seen.current.has(e.id))
+        NotificationService.showNativeNotification(
+          e.type === "PICKUP" ? "Recupero completato" : "RunSet",
+          e.message,
+          e.id,
         );
+      seen.current.add(e.id);
+    }
+    dataRef.current = next;
+    setData(next);
+    setOnline(true);
+    setError("");
+  }, []);
+  useEffect(() => {
+    let disposed = false,
+      timer: ReturnType<typeof setTimeout>;
+    async function poll() {
+      const captured = epoch.current;
+      try {
+        const next = await api();
+        if (!disposed && !exiting.current && captured === epoch.current)
+          accept(next);
+      } catch (e) {
+        if (disposed || exiting.current || captured !== epoch.current) return;
+        setOnline(false);
+        if (e instanceof ApiError && e.status === 401) {
+          dataRef.current = null;
+          setData(null);
+          setSharing(false);
+        } else setError((e as Error).message);
+      } finally {
+        if (!disposed) {
+          setLoading(false);
+          timer = setTimeout(poll, document.hidden ? 15000 : 3000);
+        }
       }
     }
+    void poll();
     return () => {
-      if (watchId.current !== null) {
-        navigator.geolocation.clearWatch(watchId.current);
+      disposed = true;
+      clearTimeout(timer);
+    };
+  }, [accept]);
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now()), 3000);
+    return () => clearInterval(tick);
+  }, []);
+  const mutate = useCallback(
+    (body: Record<string, unknown>): Promise<Snapshot> => {
+      const captured = epoch.current;
+      const pending = queue.current
+        .catch(() => {})
+        .then(async () => {
+          if (captured !== epoch.current)
+            throw new ApiError("Sessione cambiata.", 401);
+          const next = await api(body);
+          if (captured === epoch.current && !exiting.current) accept(next);
+          return next;
+        });
+      queue.current = pending;
+      return pending.catch((e) => {
+        if (captured === epoch.current && !exiting.current) {
+          setError((e as Error).message);
+          if (e instanceof ApiError && e.status === 401) {
+            dataRef.current = null;
+            setData(null);
+            setSharing(false);
+          }
+        }
+        throw e;
+      });
+    },
+    [accept],
+  );
+  useEffect(() => {
+    if (!sharing || data?.session.role !== UserRole.RUNNER) return;
+    if (!navigator.geolocation) {
+      setGpsStatus("GPS non supportato");
+      setSharing(false);
+      return;
+    }
+    let alive = true,
+      sending = false,
+      lastSent = 0;
+    let wake: WakeLockSentinel | undefined;
+    const runnerId = data.session.runnerId;
+    const success = (position: GeolocationPosition) => {
+      if (
+        !alive ||
+        sending ||
+        Date.now() - lastSent < 3000 ||
+        Date.now() - position.timestamp > 30000
+      )
+        return;
+      sending = true;
+      lastSent = Date.now();
+      setGpsStatus(`GPS ±${Math.round(position.coords.accuracy)} m`);
+      void mutate({
+        action: "location",
+        location: {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        },
+        accuracy: position.coords.accuracy,
+        timestamp: position.timestamp,
+        sharing: true,
+      })
+        .catch(() => {
+          if (alive) setGpsStatus("Posizione non inviata · controlla la rete");
+        })
+        .finally(() => {
+          sending = false;
+        });
+    };
+    const failure = (e: GeolocationPositionError) => {
+      if (!alive) return;
+      setGpsStatus(
+        e.code === 1
+          ? "GPS negato: abilitalo nelle impostazioni del browser"
+          : e.code === 2
+            ? "GPS non disponibile"
+            : "In attesa di un segnale GPS",
+      );
+      if (e.code === 1) setSharing(false);
+      void mutate({
+        action: "location",
+        sharing: false,
+        timestamp: Date.now(),
+      }).catch(() => {});
+    };
+    const options = { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 };
+    setGpsStatus("Ricerca segnale GPS…");
+    const watch = navigator.geolocation.watchPosition(
+      success,
+      failure,
+      options,
+    );
+    const fresh = () => {
+      if (!document.hidden)
+        navigator.geolocation.getCurrentPosition(success, failure, options);
+    };
+    const heartbeat = setInterval(fresh, 12000);
+    const lock = async () => {
+      try {
+        if ("wakeLock" in navigator && !document.hidden)
+          wake = await navigator.wakeLock.request("screen");
+      } catch {
+        /* Optional battery/device feature. */
       }
     };
-  }, [role, activeRunnerId]);
-
-  const updatePersonLocation = useCallback((id: string, location: Location, isLive: boolean) => {
-    setPeople(prev => prev.map(p => 
-      p.id === id ? { ...p, location, isLive } : p
-    ));
-  }, []);
-
-  useEffect(() => {
-    NotificationService.listenForMessages(
-      (newSet) => {
-        setSets(prev => {
-          if (prev.find(s => s.id === newSet.id)) return prev;
-          return [...prev, newSet];
-        });
-        setExternalNewSet(newSet);
-      },
-      (alert) => {
-        console.log('Runner Alert Received:', alert);
-      },
-      (update) => {
-        updatePersonLocation(update.runnerId, update.location, true);
-      },
-      (pickup) => {
-        setPeople(prev => prev.map(p => 
-          p.id === pickup.personId ? { ...p, isRecovered: true } : p
-        ));
+    void lock();
+    const visible = () => {
+      if (!document.hidden) {
+        fresh();
+        void lock();
       }
-    );
-  }, [updatePersonLocation]);
-
-  const handleAddSet = useCallback((newSet: SetPoint) => {
-    setSets(prev => [...prev, newSet]);
-    NotificationService.sendSetNotification(newSet);
-  }, []);
-
-  const handleDeleteSet = (id: string) => {
-    setSets(prev => prev.filter(s => s.id !== id));
+    };
+    document.addEventListener("visibilitychange", visible);
+    return () => {
+      alive = false;
+      navigator.geolocation.clearWatch(watch);
+      clearInterval(heartbeat);
+      document.removeEventListener("visibilitychange", visible);
+      void wake?.release();
+      if (dataRef.current?.session.runnerId === runnerId && !exiting.current)
+        void mutate({
+          action: "location",
+          sharing: false,
+          timestamp: Date.now(),
+        }).catch(() => {});
+    };
+  }, [sharing, data?.session.runnerId, data?.session.role, mutate]);
+  const logout = async () => {
+    exiting.current = true;
+    setSharing(false);
+    try {
+      await queue.current.catch(() => {});
+      if (dataRef.current?.session.role === UserRole.RUNNER)
+        await api({
+          action: "location",
+          sharing: false,
+          timestamp: Date.now(),
+        }).catch(() => {});
+      await api({ action: "logout" });
+      epoch.current++;
+      dataRef.current = null;
+      setData(null);
+      setError("");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      exiting.current = false;
+    }
   };
-
-  const handleAddPerson = (person: Person) => {
-    setPeople(prev => {
-      const exists = prev.find(p => p.id === person.id);
-      if (exists) {
-        return prev.map(p => p.id === person.id ? person : p);
-      }
-      return [...prev, person];
-    });
+  const setLanguage = (value: Language) => {
+    setLang(value);
+    try {
+      localStorage.setItem("runset_lang", value);
+    } catch {}
   };
-
-  const handleDeletePerson = (id: string) => {
-    setPeople(prev => prev.filter(p => p.id !== id));
+  const setMapTheme = (value: "light" | "dark") => {
+    setTheme(value);
+    try {
+      localStorage.setItem("runset_map_theme", value);
+    } catch {}
   };
-
-  const handleSelectRole = async (selectedRole: UserRole) => {
-    await NotificationService.requestPermission();
-    setRole(selectedRole);
+  const t = (key: TranslationKey, params?: Record<string, string>) => {
+    let value = translations[language][key] || key;
+    for (const [k, v] of Object.entries(params ?? {}))
+      value = value.replace(`{${k}}`, v);
+    return value;
   };
-
-  const handleLogout = () => {
-    setRole(null);
-    setActiveRunnerId(null);
-  };
-
   return (
-    <AppContext.Provider value={{ language, setLanguage, mapTheme, setMapTheme, t }}>
-      {!isUnlocked ? (
-        <AccessGate onUnlock={handleUnlock} />
-      ) : (
+    <AppContext.Provider
+      value={{ language, setLanguage, mapTheme, setMapTheme, t }}
+    >
+      {loading ? (
+        <div className="m-auto text-yellow-400" role="status">
+          Connessione alla produzione…
+        </div>
+      ) : !data ? (
         <>
-          {!role ? (
-            <RoleSelection onSelect={handleSelectRole} />
-          ) : role === UserRole.RUNNER && !activeRunnerId ? (
-            <RunnerSelection 
-              runners={people.filter(p => p.category === 'RUNNER')} 
-              onSelect={setActiveRunnerId}
-              onBack={() => setRole(null)}
-            />
-          ) : (
-            <MainLayout 
-              role={role} 
-              activeRunnerId={activeRunnerId}
-              sets={sets} 
-              people={people}
-              producerInfo={producerInfo}
-              onUpdateProducerInfo={setProducerInfo}
-              onAddSet={handleAddSet}
-              onDeleteSet={handleDeleteSet}
-              onAddPerson={handleAddPerson}
-              onDeletePerson={handleDeletePerson}
-              onLogout={handleLogout}
-              autoSelectedSet={externalNewSet}
-            />
+          <AccessGate
+            onAccess={(next) => {
+              epoch.current++;
+              accept(next);
+            }}
+          />
+          {error && (
+            <p
+              role="alert"
+              className="fixed bottom-2 inset-x-3 bg-red-950 p-3 rounded-xl text-sm text-red-200"
+            >
+              {error}
+            </p>
           )}
         </>
+      ) : (
+        <MainLayout
+          key={
+            data.session.roomCode +
+            data.session.role +
+            (data.session.runnerId ?? "")
+          }
+          data={data}
+          mutate={mutate}
+          onLogout={logout}
+          sharing={sharing}
+          onSharingChange={setSharing}
+          gpsStatus={gpsStatus}
+          online={online}
+          error={error}
+          now={now}
+        />
       )}
     </AppContext.Provider>
   );
-};
-
-export default App;
+}

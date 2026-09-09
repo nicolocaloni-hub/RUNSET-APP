@@ -1,7 +1,6 @@
-
 export enum UserRole {
-  PRODUCER = 'PRODUCER',
-  RUNNER = 'RUNNER'
+  PRODUCER = "PRODUCER",
+  RUNNER = "RUNNER",
 }
 
 export interface Location {
@@ -27,10 +26,14 @@ export interface Person {
   initials: string;
   location: Location;
   address?: string; // Indirizzo di partenza/locazione
-  category: 'RUNNER' | 'ACTOR' | 'TROUPE';
+  category: "RUNNER" | "ACTOR" | "TROUPE";
   assignedRunnerId?: string; // ID del runner responsabile
   isLive?: boolean; // Se il runner sta trasmettendo la posizione
   isRecovered?: boolean; // Se la persona è stata recuperata dal runner
+  lastSeen?: number;
+  accuracy?: number;
+  locationTimestamp?: number;
+  recoveredAt?: number;
 }
 
 export interface AppState {

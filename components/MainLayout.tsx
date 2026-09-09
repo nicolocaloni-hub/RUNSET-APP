@@ -1,467 +1,846 @@
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Bell,
+  Check,
+  ChevronRight,
+  Clapperboard,
+  Copy,
+  LogOut,
+  Moon,
+  Plus,
+  Settings,
+  Sun,
+  Users,
+  Wifi,
+  WifiOff,
+  X,
+} from "lucide-react";
+import { Person, SetPoint, Location, UserRole } from "../types";
+import { Snapshot } from "../services/protocol";
+import { useLanguage } from "../App";
+import MapLayer from "./MapLayer";
+import SetBanner from "./SetBanner";
+import PersonBanner from "./PersonBanner";
+import InfoOverlay from "./InfoOverlay";
+import RapidAlertMenu from "./RapidAlertMenu";
+import { NotificationService } from "../services/NotificationService";
+import { distanceMeters, pickupCandidates } from "../services/proximity";
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { UserRole, SetPoint, Person, Location } from '../types';
-import Sidebar from './Sidebar';
-import MapLayer from './MapLayer';
-import SetBanner from './SetBanner';
-import InfoOverlay from './InfoOverlay';
-import PersonBanner from './PersonBanner';
-import RapidAlertMenu from './RapidAlertMenu';
-import { Menu, Plus, Bell, Users, Check, Filter, Settings, Moon, Sun, X, RefreshCcw, MapPin, UserPlus, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import { useLanguage } from '../App';
-import { NotificationService } from '../services/NotificationService';
-
-interface MainLayoutProps {
-  role: UserRole;
-  activeRunnerId: string | null;
-  sets: SetPoint[];
-  people: Person[];
-  producerInfo?: { name: string; phone: string };
-  onUpdateProducerInfo?: (info: { name: string; phone: string }) => void;
-  onAddSet: (set: SetPoint) => void;
-  onDeleteSet: (id: string) => void;
-  onAddPerson: (person: Person) => void;
-  onDeletePerson: (id: string) => void;
-  onLogout: () => void;
-  autoSelectedSet?: SetPoint | null;
+type Mutation = (body: Record<string, unknown>) => Promise<Snapshot>;
+interface Props {
+  data: Snapshot;
+  mutate: Mutation;
+  onLogout: () => Promise<void>;
+  sharing: boolean;
+  onSharingChange: (v: boolean) => void;
+  gpsStatus: string;
+  online: boolean;
+  error: string;
+  now: number;
 }
-
-// Calcola distanza in metri
-const getDistance = (l1: Location, l2: Location) => {
-  const R = 6371e3; 
-  const φ1 = l1.lat * Math.PI/180;
-  const φ2 = l2.lat * Math.PI/180;
-  const Δφ = (l2.lat-l1.lat) * Math.PI/180;
-  const Δλ = (l2.lng-l1.lng) * Math.PI/180;
-  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-          Math.cos(φ1) * Math.cos(φ2) *
-          Math.sin(Δλ/2) * Math.sin(Δλ/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c;
+type Editor = {
+  type: "SET" | "RUNNER" | "ACTOR" | "TROUPE";
+  entity?: Person | SetPoint;
+  location?: Location;
 };
+type Panel = "people" | "sets" | "activity" | "settings" | null;
+const input =
+  "w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm";
 
-const MainLayout: React.FC<MainLayoutProps> = ({ 
-  role, activeRunnerId, sets, people, producerInfo, onUpdateProducerInfo, onAddSet, onDeleteSet, onAddPerson, onDeletePerson, onLogout, autoSelectedSet 
-}) => {
-  const { t, mapTheme, setMapTheme } = useLanguage();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isAddingSet, setIsAddingSet] = useState(false);
-  const [isAddingPerson, setIsAddingPerson] = useState<'RUNNER' | 'ACTOR' | 'TROUPE' | null>(null);
-  const [pendingCoords, setPendingCoords] = useState<Location | null>(null);
-  const [showContextMenu, setShowContextMenu] = useState<Location | null>(null);
-  const [selectedEntity, setSelectedEntity] = useState<SetPoint | Person | null>(null);
-  
-  const [filterRunnerId, setFilterRunnerId] = useState<string | null>(null);
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [confirmReset, setConfirmReset] = useState(false);
-
-  // Stato per il recupero prossimità
-  const [pickupCandidate, setPickupCandidate] = useState<Person | null>(null);
-
-  const visiblePeople = useMemo(() => {
-    if (role === UserRole.RUNNER) {
-      return people.filter(p => 
-        p.id === activeRunnerId || p.assignedRunnerId === activeRunnerId
-      );
+function ProductionSettings({
+  data,
+  mutate,
+  onLogout,
+}: {
+  data: Snapshot;
+  mutate: Mutation;
+  onLogout: () => Promise<void>;
+}) {
+  const { mapTheme, setMapTheme } = useLanguage();
+  const [info, setInfo] = useState(data.producerInfo);
+  const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await mutate({ action: "saveProducer", producerInfo: info });
+      setStatus("Contatti salvati.");
+    } catch (e) {
+      setStatus((e as Error).message);
+    } finally {
+      setBusy(false);
     }
-    if (!filterRunnerId) return people;
-    return people.filter(p => 
-      p.id === filterRunnerId || p.assignedRunnerId === filterRunnerId
-    );
-  }, [role, activeRunnerId, people, filterRunnerId]);
-
-  const runners = useMemo(() => people.filter(p => p.category === 'RUNNER'), [people]);
-
-  const activeRunner = useMemo(() => 
-    people.find(p => p.id === activeRunnerId), 
-  [people, activeRunnerId]);
-
-  // Logic per il recupero automatico
-  useEffect(() => {
-    if (role === UserRole.RUNNER && activeRunner && activeRunner.location) {
-      const assignedToMe = people.filter(p => 
-        p.assignedRunnerId === activeRunnerId && !p.isRecovered
-      );
-
-      const candidate = assignedToMe.find(p => {
-        const dist = getDistance(activeRunner.location, p.location);
-        return dist < 15; // 15 metri (raggio di sovrapposizione)
-      });
-
-      if (candidate && (!pickupCandidate || pickupCandidate.id !== candidate.id)) {
-        setPickupCandidate(candidate);
-      } else if (!candidate && pickupCandidate) {
-        setPickupCandidate(null);
-      }
-    }
-  }, [people, activeRunner, activeRunnerId, role, pickupCandidate]);
-
-  useEffect(() => {
-    if (autoSelectedSet) {
-      setSelectedEntity(autoSelectedSet);
-    }
-  }, [autoSelectedSet]);
-
-  const handleMapLongPress = (lat: number, lng: number) => {
-    if (role === UserRole.PRODUCER) {
-      setShowContextMenu({ lat, lng });
-      setSelectedEntity(null);
-    }
-  };
-
-  const handleEntityClick = (entity: SetPoint | Person) => {
-    setSelectedEntity(entity);
-  };
-
-  const closeOverlays = () => {
-    setSelectedEntity(null);
-    setIsAddingSet(false);
-    setIsAddingPerson(null);
-    setPendingCoords(null);
-    setIsSettingsOpen(false);
-    setShowContextMenu(null);
-    setConfirmReset(false);
-  };
-
-  const handleCloseSession = () => {
-    localStorage.clear();
-    window.location.href = window.location.origin + window.location.pathname;
-  };
-
-  const confirmPickup = () => {
-    if (!pickupCandidate || !activeRunner) return;
-    
-    const data = {
-      runnerName: activeRunner.name,
-      personName: pickupCandidate.name,
-      personId: pickupCandidate.id
-    };
-
-    NotificationService.sendPickupUpdate(data);
-    
-    // Aggiornamento locale
-    const updatedPerson = { ...pickupCandidate, isRecovered: true };
-    onAddPerson(updatedPerson); // Questo agirà come aggiornamento grazie alla logica in App.tsx se modificata, 
-                               // ma qui people è gestito esternamente. In App.tsx aggiungiamo logica update.
-    setPickupCandidate(null);
-  };
-
+  }
   return (
-    <div className="relative h-[100dvh] w-full flex overflow-hidden bg-zinc-950">
-      <Sidebar 
-        isOpen={isSidebarOpen} 
-        onClose={() => setIsSidebarOpen(false)} 
-        role={role}
-        activeRunnerId={activeRunnerId}
-        producerInfo={producerInfo}
-        onUpdateProducerInfo={onUpdateProducerInfo}
-        sets={sets}
-        people={role === UserRole.PRODUCER ? people : visiblePeople}
-        onSelectSet={(s) => {
-          setSelectedEntity(s);
-          setIsSidebarOpen(false);
-        }}
-        onDeleteSet={onDeleteSet}
-        onDeletePerson={onDeletePerson}
-        onTriggerAddPerson={(type) => {
-          setIsAddingPerson(type);
-          setIsSidebarOpen(false);
-        }}
-        onLogout={onLogout}
-      />
-
-      <main className="flex-1 relative z-0 h-full">
-        <MapLayer 
-          sets={sets} 
-          runners={visiblePeople.filter(p => p.category === 'RUNNER')} 
-          actors={visiblePeople.filter(p => p.category === 'ACTOR')}
-          crew={visiblePeople.filter(p => p.category === 'TROUPE')} 
-          onEntityClick={handleEntityClick}
-          onMapClick={() => { if(showContextMenu) setShowContextMenu(null); }}
-          onMapLongPress={handleMapLongPress}
-          forceCenter={selectedEntity && 'address' in selectedEntity ? selectedEntity.location : undefined}
-          theme={mapTheme}
-        />
-
-        {/* Proximity Pickup Banner */}
-        {pickupCandidate && role === UserRole.RUNNER && (
-          <div className="absolute top-24 left-4 right-4 z-[4000] animate-in slide-in-from-top duration-500">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-2xl flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-violet-500/10 text-violet-500 rounded-full flex items-center justify-center font-bold">
-                  {pickupCandidate.initials}
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Recupero Vicino</p>
-                  <p className="text-sm font-bold text-white">Hai preso {pickupCandidate.name}?</p>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button 
-                  onClick={() => setPickupCandidate(null)}
-                  className="px-4 py-2 bg-zinc-800 text-zinc-400 text-xs font-bold rounded-xl active:scale-95 transition-all"
-                >
-                  NO
-                </button>
-                <button 
-                  onClick={confirmPickup}
-                  className="px-6 py-2 bg-green-600 text-white text-xs font-bold rounded-xl shadow-lg shadow-green-600/20 active:scale-95 transition-all flex items-center gap-2"
-                >
-                  <CheckCircle2 size={14} />
-                  SÌ
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Menu contestuale Mappa */}
-        {showContextMenu && (
-          <div className="fixed inset-0 z-[2500] pointer-events-none">
-             <div 
-               className="absolute z-[2501] bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl p-2 animate-in zoom-in-95 duration-200 pointer-events-auto"
-               style={{ 
-                 left: `calc(50% - 110px)`, 
-                 top: `calc(50% - 80px)` 
-               }}
-             >
-               <div className="p-3 border-b border-zinc-800 mb-2 flex items-center justify-between gap-8">
-                 <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{t('add_here')}</p>
-                 <button onClick={() => setShowContextMenu(null)} className="text-zinc-600 hover:text-white"><X size={14}/></button>
-               </div>
-               <div className="space-y-1 w-52">
-                 <button 
-                   onClick={() => { setPendingCoords(showContextMenu); setIsAddingSet(true); setShowContextMenu(null); }}
-                   className="w-full flex items-center gap-3 p-3 rounded-xl text-xs font-bold text-yellow-500 hover:bg-yellow-500/10 transition-colors"
-                 >
-                   <MapPin size={16} />
-                   {t('add_set_option')}
-                 </button>
-                 <button 
-                   onClick={() => { setPendingCoords(showContextMenu); setIsAddingPerson('RUNNER'); setShowContextMenu(null); }}
-                   className="w-full flex items-center gap-3 p-3 rounded-xl text-xs font-bold text-blue-500 hover:bg-blue-500/10 transition-colors"
-                 >
-                   <UserPlus size={16} />
-                   {t('add_person_option')}
-                 </button>
-               </div>
-             </div>
-          </div>
-        )}
-
-        {/* Header Controls */}
-        <div className="absolute top-4 left-4 right-4 z-10 flex flex-col gap-2 pt-[env(safe-area-inset-top)]">
-          <div className="flex justify-between items-start">
-            <div className="flex gap-2">
-              <button 
-                onClick={() => setIsSidebarOpen(true)}
-                className="p-3 bg-zinc-900/90 text-white rounded-xl shadow-lg border border-zinc-800 active:scale-95 transition-all"
-              >
-                <Menu size={24} />
-              </button>
-              
-              <div className="flex items-center gap-2 px-3 py-1 bg-zinc-900/90 border border-zinc-800 rounded-xl shadow-lg h-[48px]">
-                <Bell size={16} className={Notification.permission === 'granted' ? 'text-green-500' : 'text-zinc-500'} />
-                <span className="text-[10px] font-bold uppercase tracking-tighter text-zinc-400">
-                  {Notification.permission === 'granted' ? 'Sync Live' : 'Notifiche Off'}
-                </span>
-              </div>
-
-              <button 
-                onClick={() => setIsSettingsOpen(true)}
-                className="p-3 bg-zinc-900/90 text-white rounded-xl shadow-lg border border-zinc-800 active:scale-95 transition-all"
-              >
-                <Settings size={24} />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {role === UserRole.RUNNER && activeRunner && (
-          <RapidAlertMenu 
-            runnerName={activeRunner.name} 
-            producerPhone={producerInfo?.phone}
-          />
-        )}
-
-        {/* PRODUCER TOOLS */}
-        {role === UserRole.PRODUCER && (
-          <>
-            <div className="absolute bottom-10 left-6 z-10 mb-[env(safe-area-inset-bottom)]">
-              <div className="relative">
-                <button 
-                  onClick={() => setIsFilterOpen(!isFilterOpen)}
-                  className={`flex items-center justify-center w-14 h-14 rounded-full shadow-2xl transition-all active:scale-95 border-2 ${
-                    filterRunnerId ? 'bg-yellow-500 border-yellow-400 text-black' : 'bg-zinc-900 border-zinc-800 text-zinc-400'
-                  }`}
-                >
-                  <Filter size={20} />
-                </button>
-
-                {isFilterOpen && (
-                  <div className="absolute bottom-16 left-0 w-64 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-2 animate-in slide-in-from-bottom-4 duration-200">
-                    <div className="p-3 border-b border-zinc-800 mb-2">
-                      <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{t('filter_runners')}</p>
-                    </div>
-                    <div className="max-h-60 overflow-y-auto scrollbar-hide space-y-1">
-                      <button 
-                        onClick={() => { setFilterRunnerId(null); setIsFilterOpen(false); }}
-                        className={`w-full flex items-center justify-between p-3 rounded-xl text-sm font-medium transition-colors ${!filterRunnerId ? 'bg-yellow-500 text-black' : 'text-zinc-400 hover:bg-zinc-800'}`}
-                      >
-                        {t('show_all')}
-                        {!filterRunnerId && <Check size={14} />}
-                      </button>
-                      {runners.map(runner => (
-                        <button 
-                          key={runner.id}
-                          onClick={() => { setFilterRunnerId(runner.id); setIsFilterOpen(false); }}
-                          className={`w-full flex items-center justify-between p-3 rounded-xl text-sm font-medium transition-colors ${filterRunnerId === runner.id ? 'bg-yellow-500 text-black' : 'text-zinc-400 hover:bg-zinc-800'}`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[8px] ${filterRunnerId === runner.id ? 'bg-black/20 text-black' : 'bg-blue-500/20 text-blue-500'}`}>
-                              {runner.initials}
-                            </div>
-                            {runner.name}
-                          </div>
-                          {filterRunnerId === runner.id && <Check size={14} />}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {!isAddingSet && !isAddingPerson && !selectedEntity && (
-              <div className="absolute bottom-10 right-6 z-10 mb-[env(safe-area-inset-bottom)]">
-                <button 
-                  onClick={() => setIsAddingSet(true)}
-                  className="flex items-center gap-2 px-6 py-4 bg-yellow-500 text-black font-bold rounded-full shadow-2xl hover:bg-yellow-400 transition-all active:scale-95"
-                >
-                  <Plus size={20} />
-                  Set
-                </button>
-              </div>
-            )}
-          </>
-        )}
-
-        {/* Settings Modal */}
-        {isSettingsOpen && (
-          <div className="fixed inset-0 z-[3000] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={closeOverlays}>
-            <div className="w-full max-w-xs bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl p-6" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-sm font-bold uppercase tracking-widest text-zinc-400">{t('settings')}</h3>
-                <button onClick={closeOverlays} className="p-2 text-zinc-500 hover:text-white transition-colors">
-                  <X size={20} />
-                </button>
-              </div>
-
-              <div className="space-y-8">
-                <div>
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-3">{t('map_theme')}</label>
-                  <div className="grid grid-cols-2 gap-2 bg-zinc-950 p-1 rounded-xl border border-zinc-800">
-                    <button 
-                      onClick={() => setMapTheme('light')}
-                      className={`flex items-center justify-center gap-2 py-3 rounded-lg text-xs font-bold transition-all ${mapTheme === 'light' ? 'bg-white text-black shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}
-                    >
-                      <Sun size={14} />
-                      {t('theme_light')}
-                    </button>
-                    <button 
-                      onClick={() => setMapTheme('dark')}
-                      className={`flex items-center justify-center gap-2 py-3 rounded-lg text-xs font-bold transition-all ${mapTheme === 'dark' ? 'bg-zinc-800 text-white shadow-lg border border-zinc-700' : 'text-zinc-500 hover:text-zinc-300'}`}
-                    >
-                      <Moon size={14} />
-                      {t('theme_dark')}
-                    </button>
-                  </div>
-                </div>
-
-                {role === UserRole.PRODUCER && (
-                  <div className="pt-4 border-t border-zinc-800">
-                    {!confirmReset ? (
-                      <button 
-                        onClick={() => setConfirmReset(true)}
-                        className="w-full flex items-center justify-between p-4 bg-red-500/10 border border-red-500/30 text-red-500 rounded-2xl hover:bg-red-500/20 transition-all group"
-                      >
-                        <div className="text-left">
-                          <div className="text-xs font-black uppercase tracking-widest">{t('close_session')}</div>
-                          <div className="text-[8px] uppercase tracking-tighter opacity-60 font-bold">{t('close_session_desc')}</div>
-                        </div>
-                        <RefreshCcw size={18} className="group-hover:rotate-180 transition-transform duration-500" />
-                      </button>
-                    ) : (
-                      <div className="space-y-2 animate-in zoom-in-95 duration-200">
-                        <p className="text-[10px] text-red-400 font-bold uppercase tracking-widest text-center px-2">Vuoi davvero cancellare tutto?</p>
-                        <div className="grid grid-cols-2 gap-2">
-                          <button 
-                            onClick={() => setConfirmReset(false)}
-                            className="p-3 bg-zinc-800 text-zinc-400 rounded-xl text-xs font-bold uppercase tracking-widest"
-                          >
-                            Annulla
-                          </button>
-                          <button 
-                            onClick={handleCloseSession}
-                            className="p-3 bg-red-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-red-600/20"
-                          >
-                            <AlertTriangle size={14} />
-                            RESET
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {isAddingSet && (
-          <SetBanner 
-            initialLocation={pendingCoords || undefined}
-            onSave={(newSet) => {
-              onAddSet(newSet);
-              setIsAddingSet(false);
-              setPendingCoords(null);
-            }} 
-            onCancel={() => {
-              setIsAddingSet(false);
-              setPendingCoords(null);
-            }} 
-          />
-        )}
-
-        {isAddingPerson && (
-          <PersonBanner 
-            type={isAddingPerson}
-            initialLocation={pendingCoords || undefined}
-            runners={people.filter(p => p.category === 'RUNNER')}
-            onSave={(p) => {
-              onAddPerson(p);
-              setIsAddingPerson(null);
-              setPendingCoords(null);
-            }}
-            onCancel={() => {
-              setIsAddingPerson(null);
-              setPendingCoords(null);
-            }}
-          />
-        )}
-
-        {selectedEntity && (
-          <InfoOverlay 
-            entity={selectedEntity} 
-            onClose={closeOverlays} 
-            onDelete={onDeleteSet}
-            role={role}
-          />
-        )}
-      </main>
+    <div className="space-y-6">
+      <div>
+        <p className="text-xs text-zinc-400 mb-2">CODICE PRODUZIONE</p>
+        <p className="font-mono text-xl text-yellow-400 select-all break-all">
+          {data.session.roomCode}
+        </p>
+        <p className="text-xs text-zinc-500 mt-2">
+          Conservalo insieme alla password per accedere dagli altri dispositivi.
+        </p>
+      </div>
+      {data.session.role === UserRole.PRODUCER && (
+        <form onSubmit={save} className="space-y-3">
+          <label className="block text-sm">
+            Nome produttore
+            <input
+              className={input + " mt-2"}
+              value={info.name}
+              onChange={(e) => setInfo({ ...info, name: e.target.value })}
+              required
+              maxLength={120}
+            />
+          </label>
+          <label className="block text-sm">
+            Telefono produttore
+            <input
+              className={input + " mt-2"}
+              type="tel"
+              value={info.phone}
+              onChange={(e) => setInfo({ ...info, phone: e.target.value })}
+              maxLength={40}
+            />
+          </label>
+          <button
+            disabled={busy}
+            className="bg-yellow-400 text-black p-3 rounded-xl font-semibold w-full"
+          >
+            {busy ? "Salvataggio…" : "Salva contatti"}
+          </button>
+        </form>
+      )}
+      <button
+        onClick={() => setMapTheme(mapTheme === "dark" ? "light" : "dark")}
+        className="w-full flex items-center gap-3 rounded-xl bg-zinc-800 p-3"
+      >
+        {mapTheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}Mappa{" "}
+        {mapTheme === "dark" ? "chiara" : "scura"}
+      </button>
+      <button
+        onClick={async () =>
+          setStatus(
+            (await NotificationService.requestPermission())
+              ? "Notifiche browser abilitate."
+              : "Le notifiche restano disponibili nel pannello Attività.",
+          )
+        }
+        className="w-full flex items-center gap-3 rounded-xl bg-zinc-800 p-3"
+      >
+        <Bell size={18} />
+        Abilita notifiche browser
+      </button>
+      <p className="text-xs text-zinc-400 leading-relaxed">
+        Gli avvisi sono sempre salvati in Attività. Le notifiche del browser
+        dipendono dal dispositivo e richiedono l’app aperta. Il GPS in una
+        pagina web non è garantito con schermo bloccato o app in secondo piano.
+      </p>
+      {status && (
+        <p role="status" className="text-sm text-yellow-200">
+          {status}
+        </p>
+      )}
+      <button
+        onClick={() => void onLogout()}
+        className="w-full flex items-center gap-3 rounded-xl border border-zinc-700 p-3 text-zinc-300"
+      >
+        <LogOut size={18} />
+        Esci dalla produzione
+      </button>
     </div>
   );
-};
+}
 
-export default MainLayout;
+export default function MainLayout({
+  data,
+  mutate,
+  onLogout,
+  sharing,
+  onSharingChange,
+  gpsStatus,
+  online,
+  error,
+  now,
+}: Props) {
+  const { mapTheme } = useLanguage();
+  const { people, sets, session } = data;
+  const producer = session.role === UserRole.PRODUCER;
+  const [panel, setPanel] = useState<Panel>(() =>
+    window.matchMedia("(min-width:768px)").matches ? "people" : null,
+  );
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editor, setEditor] = useState<Editor | null>(null);
+  const [point, setPoint] = useState<Location | null>(null);
+  const [filter, setFilter] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [localError, setLocalError] = useState("");
+  const [invite, setInvite] = useState<{ name: string; code: string } | null>(
+    null,
+  );
+  const [copied, setCopied] = useState(false);
+  const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
+  const lastNotice = useRef(0);
+  const [notice, setNotice] = useState("");
+  const active = people.find((p) => p.id === session.runnerId);
+  const runners = people.filter((p) => p.category === "RUNNER");
+  const selected =
+    people.find((p) => p.id === selectedId) ??
+    sets.find((s) => s.id === selectedId);
+  const visible = useMemo(
+    () =>
+      filter
+        ? people.filter((p) => p.id === filter || p.assignedRunnerId === filter)
+        : people,
+    [people, filter],
+  );
+  const candidates = sharing ? pickupCandidates(active, people, now) : [];
+  const candidate = candidates.find((p) => !dismissed.has(p.id));
+  useEffect(() => {
+    if (!active) return;
+    setDismissed((previous) => {
+      const remaining = new Set(
+        [...previous].filter((id) => {
+          const p = people.find((x) => x.id === id);
+          return (
+            p &&
+            !p.isRecovered &&
+            distanceMeters(active.location, p.location) < 12
+          );
+        }),
+      );
+      return remaining.size === previous.size ? previous : remaining;
+    });
+  }, [active, people]);
+  useEffect(() => {
+    const latest = data.events.at(-1);
+    if (!latest) return;
+    if (lastNotice.current && latest.createdAt > lastNotice.current)
+      setNotice(latest.message);
+    lastNotice.current = latest.createdAt;
+  }, [data.events]);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(""), 8000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+  const toggle = (next: Panel) => setPanel(panel === next ? null : next);
+  const close = () => {
+    setSelectedId(null);
+    setEditor(null);
+    setPoint(null);
+  };
+  const add = (type: Editor["type"], location?: Location) => {
+    setEditor({ type, location });
+    setPoint(null);
+    setSelectedId(null);
+    setPanel(null);
+  };
+  const select = (entity: Person | SetPoint) => {
+    setSelectedId(entity.id);
+    setEditor(null);
+    setPanel(null);
+  };
+  async function pickup(person: Person) {
+    if (busy) return;
+    setBusy(true);
+    setLocalError("");
+    try {
+      await mutate({ action: "pickup", personId: person.id });
+      setDismissed((s) => new Set(s).add(person.id));
+    } catch (e) {
+      setLocalError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function makeInvite(runner: Person) {
+    if (
+      !window.confirm(
+        `Creare un nuovo invito per ${runner.name}? Gli accessi precedenti di questo runner saranno revocati.`,
+      )
+    )
+      return;
+    setBusy(true);
+    try {
+      const next = await mutate({
+        action: "createInvite",
+        runnerId: runner.id,
+      });
+      setInvite({ name: runner.name, code: next.accessCode! });
+      setCopied(false);
+    } catch (e) {
+      setLocalError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const focus =
+    selected &&
+    (!("category" in selected) ||
+      selected.category !== "RUNNER" ||
+      selected.lastSeen)
+      ? selected.location
+      : undefined;
+  return (
+    <div className="h-[100dvh] flex flex-col bg-zinc-950 text-white">
+      <header className="shrink-0 border-b border-zinc-800 bg-zinc-950 z-30 px-3 md:px-5 h-16 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <Clapperboard className="text-yellow-400 shrink-0" size={24} />
+          <div className="min-w-0">
+            <h1 className="font-black text-xl tracking-tight leading-5">
+              RunSet<span className="text-yellow-400">.</span>
+            </h1>
+            <p className="text-[11px] text-zinc-400 truncate max-w-[130px] sm:max-w-xs">
+              {session.roomName}
+            </p>
+          </div>
+        </div>
+        <nav className="flex items-center gap-1.5" aria-label="Menu produzione">
+          {(
+            [
+              { key: "people", Icon: Users, label: "Squadra" },
+              { key: "sets", Icon: Clapperboard, label: "Set" },
+              { key: "activity", Icon: Bell, label: "Attività" },
+              { key: "settings", Icon: Settings, label: "Impostazioni" },
+            ] as const
+          ).map(({ key, Icon, label }) => (
+            <button
+              key={key}
+              aria-label={label}
+              title={label}
+              onClick={() => toggle(key)}
+              className={`p-2.5 rounded-xl ${panel === key ? "bg-yellow-400 text-black" : "bg-zinc-900 text-zinc-300"}`}
+            >
+              <Icon size={19} />
+            </button>
+          ))}
+        </nav>
+      </header>
+      <div className="flex-1 min-h-0 relative">
+        <div className="absolute inset-0">
+          <MapLayer
+            sets={sets}
+            runners={visible.filter((p) => p.category === "RUNNER")}
+            actors={visible.filter((p) => p.category === "ACTOR")}
+            crew={visible.filter((p) => p.category === "TROUPE")}
+            onEntityClick={select}
+            onMapClick={(lat, lng) => {
+              if (producer && !editor && !selected) setPoint({ lat, lng });
+            }}
+            onMapLongPress={(lat, lng) => {
+              if (producer) {
+                close();
+                setPoint({ lat, lng });
+              }
+            }}
+            forceCenter={focus}
+            theme={mapTheme}
+          />
+        </div>
+        <div className="absolute top-3 left-3 right-3 z-10 flex items-start justify-between gap-3 pointer-events-none">
+          <div className="bg-zinc-950/95 border border-zinc-700 rounded-xl py-2 px-3 text-xs flex gap-2 items-center shadow-xl pointer-events-auto">
+            {online ? (
+              <Wifi size={15} className="text-emerald-400" />
+            ) : (
+              <WifiOff size={15} className="text-red-400" />
+            )}
+            {online
+              ? "Connesso · aggiornamento ogni 3 s"
+              : "Connessione interrotta"}
+          </div>
+          {producer && (
+            <button
+              aria-label="Aggiungi set"
+              onClick={() => add("SET")}
+              className="pointer-events-auto bg-yellow-400 text-black rounded-xl p-2.5 font-bold flex gap-1 items-center shadow-xl"
+            >
+              <Plus size={18} />
+              <span className="hidden sm:inline">Set</span>
+            </button>
+          )}
+        </div>
+        {(error || localError) && (
+          <div
+            role="alert"
+            className="absolute top-16 inset-x-3 z-[2100] text-sm text-red-100 bg-red-950 border border-red-800 rounded-xl p-3"
+          >
+            {localError || error}
+            <button
+              aria-label="Chiudi errore"
+              className="float-right ml-2"
+              onClick={() => setLocalError("")}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+        {notice && !panel && (
+          <button
+            onClick={() => {
+              setPanel("activity");
+              setNotice("");
+            }}
+            role="status"
+            className="absolute top-16 left-3 right-3 md:left-auto md:w-96 z-20 bg-zinc-900 border border-yellow-400/50 rounded-xl p-4 text-left text-sm shadow-xl"
+          >
+            <Bell size={16} className="inline mr-2 text-yellow-400" />
+            {notice}
+          </button>
+        )}
+        {producer &&
+          people.length === 0 &&
+          sets.length === 0 &&
+          !panel &&
+          !editor &&
+          !point && (
+            <div className="absolute inset-x-6 top-24 max-w-sm mx-auto z-10 rounded-2xl bg-zinc-950/95 border border-zinc-700 p-5 shadow-2xl">
+              <p className="font-bold text-lg mb-2">Prepariamo la giornata.</p>
+              <p className="text-sm text-zinc-400 mb-4">
+                Aggiungi i runner alla squadra, crea il set e assegna le persone
+                da recuperare.
+              </p>
+              <button
+                onClick={() => setPanel("people")}
+                className="bg-yellow-400 text-black rounded-xl px-4 py-3 text-sm font-bold"
+              >
+                Aggiungi la squadra
+              </button>
+            </div>
+          )}
+        {candidate && !panel && !editor && (
+          <section
+            role="alertdialog"
+            aria-label="Conferma recupero vicino"
+            className="absolute top-20 inset-x-3 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-[460px] z-[2200] rounded-2xl bg-zinc-900 border border-yellow-400 p-4 shadow-2xl"
+          >
+            <p className="text-xs text-yellow-400 font-bold mb-1">
+              ENTRO 5 METRI · GPS ±{Math.round(active?.accuracy ?? 0)} m
+            </p>
+            <h2 className="font-bold text-lg">
+              Hai recuperato {candidate.name}?
+            </h2>
+            <div className="grid grid-cols-2 gap-2 mt-4">
+              <button
+                disabled={busy}
+                onClick={() =>
+                  setDismissed((s) => new Set(s).add(candidate.id))
+                }
+                className="bg-zinc-700 rounded-xl p-3"
+              >
+                No
+              </button>
+              <button
+                disabled={busy}
+                onClick={() => void pickup(candidate)}
+                className="bg-yellow-400 text-black rounded-xl p-3 font-bold"
+              >
+                {busy ? "Salvataggio…" : "Sì, recuperato"}
+              </button>
+            </div>
+          </section>
+        )}
+        {!producer && active && !editor && !selected && (
+          <div className="absolute bottom-7 left-3 right-3 md:max-w-md md:right-auto z-20 rounded-2xl border border-zinc-700 bg-zinc-950/95 shadow-2xl p-4">
+            <div className="flex justify-between gap-3 items-center mb-3">
+              <div>
+                <p className="font-bold">{active.name}</p>
+                <p className="text-xs text-zinc-400 mt-1">
+                  {sharing ? gpsStatus : "Condivisione GPS disattivata"}
+                </p>
+              </div>
+              <button
+                onClick={() => onSharingChange(!sharing)}
+                className={`rounded-xl px-4 py-3 text-sm font-bold ${sharing ? "bg-zinc-700" : "bg-yellow-400 text-black"}`}
+              >
+                {sharing ? "Ferma GPS" : "Condividi GPS"}
+              </button>
+            </div>
+            <p className="text-xs leading-relaxed text-zinc-400">
+              {sharing
+                ? "Tieni RunSet aperta durante il servizio. Il recupero automatico propone una conferma: non viene mai segnato da solo."
+                : "Condividi la tua posizione con il produttore di questa produzione. Puoi fermarla in qualsiasi momento."}
+            </p>
+          </div>
+        )}
+        {!producer && active && (
+          <RapidAlertMenu
+            runnerName={active.name}
+            producerPhone={data.producerInfo.phone}
+            onSend={async (type) => {
+              await mutate({ action: "alert", type });
+            }}
+          />
+        )}
+        {point && !editor && (
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 w-72 z-30 bg-zinc-950 border border-zinc-700 rounded-2xl shadow-2xl p-4">
+            <div className="flex justify-between items-center mb-3">
+              <p className="text-sm font-bold">Aggiungi in questo punto</p>
+              <button aria-label="Chiudi" onClick={() => setPoint(null)}>
+                <X size={18} />
+              </button>
+            </div>
+            {(["SET", "ACTOR", "TROUPE"] as const).map((type) => (
+              <button
+                key={type}
+                onClick={() => add(type, point)}
+                className="block text-left p-3 rounded-xl hover:bg-zinc-800 w-full text-sm"
+              >
+                {type === "SET"
+                  ? "🎬 Set"
+                  : type === "ACTOR"
+                    ? "🎭 Attore / attrice"
+                    : "👥 Membro troupe"}
+              </button>
+            ))}
+          </div>
+        )}
+        {panel && (
+          <>
+            <button
+              aria-label="Chiudi pannello"
+              className="absolute inset-0 z-30 bg-black/30 md:bg-transparent"
+              onClick={() => setPanel(null)}
+            />
+            <aside className="absolute top-0 bottom-0 left-0 w-full sm:w-[360px] z-40 bg-zinc-950 border-r border-zinc-800 flex flex-col shadow-2xl">
+              <div className="flex items-center justify-between p-5 border-b border-zinc-800">
+                <h2 className="text-lg font-bold">
+                  {panel === "people"
+                    ? "Squadra"
+                    : panel === "sets"
+                      ? "Set di produzione"
+                      : panel === "activity"
+                        ? "Attività"
+                        : "Impostazioni"}
+                </h2>
+                <button
+                  aria-label="Chiudi pannello"
+                  onClick={() => setPanel(null)}
+                  className="p-2 rounded-lg bg-zinc-900"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="p-5 overflow-y-auto flex-1 space-y-5">
+                {panel === "people" && (
+                  <>
+                    {producer && (
+                      <>
+                        <div className="grid grid-cols-3 gap-2">
+                          {(["RUNNER", "ACTOR", "TROUPE"] as const).map(
+                            (type) => (
+                              <button
+                                key={type}
+                                onClick={() => add(type)}
+                                className="bg-zinc-800 rounded-xl py-3 text-xs flex flex-col items-center gap-1"
+                              >
+                                <Plus size={16} />
+                                {type === "RUNNER"
+                                  ? "Runner"
+                                  : type === "ACTOR"
+                                    ? "Cast"
+                                    : "Troupe"}
+                              </button>
+                            ),
+                          )}
+                        </div>
+                        <label className="block text-xs text-zinc-400">
+                          Filtra per runner
+                          <select
+                            aria-label="Filtra per runner"
+                            value={filter}
+                            onChange={(e) => setFilter(e.target.value)}
+                            className={input + " mt-2"}
+                          >
+                            <option value="">Tutta la squadra</option>
+                            {runners.map((r) => (
+                              <option key={r.id} value={r.id}>
+                                {r.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </>
+                    )}
+                    {(["RUNNER", "ACTOR", "TROUPE"] as const).map(
+                      (category) => {
+                        const members = visible.filter(
+                          (p) => p.category === category,
+                        );
+                        return (
+                          <section key={category}>
+                            <h3 className="text-xs text-zinc-500 tracking-widest uppercase mb-3">
+                              {category === "RUNNER"
+                                ? "Runner"
+                                : category === "ACTOR"
+                                  ? "Cast"
+                                  : "Troupe"}{" "}
+                              · {members.length}
+                            </h3>
+                            {members.length === 0 && (
+                              <p className="text-sm text-zinc-500">
+                                {producer
+                                  ? "Nessun contatto aggiunto."
+                                  : "Nessuna persona assegnata."}
+                              </p>
+                            )}
+                            <div className="space-y-2">
+                              {members.map((p) => (
+                                <div
+                                  key={p.id}
+                                  className="border border-zinc-800 bg-zinc-900/60 rounded-xl p-3"
+                                >
+                                  <button
+                                    onClick={() => select(p)}
+                                    className="w-full text-left flex items-center gap-3"
+                                  >
+                                    <span
+                                      className={`rounded-full w-9 h-9 flex items-center justify-center shrink-0 font-bold text-xs ${p.isRecovered ? "bg-zinc-600 text-zinc-300" : category === "RUNNER" ? "bg-blue-500" : category === "ACTOR" ? "bg-violet-500" : "bg-emerald-600"}`}
+                                    >
+                                      {p.isRecovered ? (
+                                        <Check size={17} />
+                                      ) : (
+                                        p.initials
+                                      )}
+                                    </span>
+                                    <span className="min-w-0 flex-1">
+                                      <span className="block font-semibold text-sm truncate">
+                                        {p.name}
+                                      </span>
+                                      <span className="block text-xs text-zinc-400 mt-1">
+                                        {category === "RUNNER"
+                                          ? p.isLive &&
+                                            p.lastSeen &&
+                                            now - p.lastSeen <= 30000
+                                            ? "● GPS attivo"
+                                            : p.lastSeen
+                                              ? "Ultima posizione salvata"
+                                              : "In attesa del GPS"
+                                          : p.isRecovered
+                                            ? "Recuperato"
+                                            : (people.find(
+                                                (r) =>
+                                                  r.id === p.assignedRunnerId,
+                                              )?.name ?? "Da assegnare")}
+                                      </span>
+                                    </span>
+                                    <ChevronRight
+                                      size={15}
+                                      className="text-zinc-500"
+                                    />
+                                  </button>
+                                  {producer && category === "RUNNER" && (
+                                    <button
+                                      disabled={busy}
+                                      onClick={() => void makeInvite(p)}
+                                      className="mt-3 text-xs text-yellow-400 border-t border-zinc-800 pt-2 w-full text-left"
+                                    >
+                                      Crea / rinnova invito personale
+                                    </button>
+                                  )}
+                                  {!producer &&
+                                    category !== "RUNNER" &&
+                                    !p.isRecovered && (
+                                      <button
+                                        disabled={busy}
+                                        onClick={() => void pickup(p)}
+                                        className="mt-3 rounded-lg bg-yellow-400 text-black text-sm font-bold p-2 w-full"
+                                      >
+                                        Conferma recupero
+                                      </button>
+                                    )}
+                                </div>
+                              ))}
+                            </div>
+                          </section>
+                        );
+                      },
+                    )}
+                  </>
+                )}
+                {panel === "sets" && (
+                  <>
+                    {producer && (
+                      <button
+                        onClick={() => add("SET")}
+                        className="bg-yellow-400 text-black w-full p-3 rounded-xl font-bold flex items-center justify-center gap-2"
+                      >
+                        <Plus size={18} />
+                        Aggiungi set
+                      </button>
+                    )}
+                    {sets.length === 0 && (
+                      <p className="text-sm text-zinc-400">
+                        I set salvati appariranno qui e sulla mappa.
+                      </p>
+                    )}
+                    {sets.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => select(s)}
+                        className="w-full text-left p-4 border border-zinc-800 rounded-xl bg-zinc-900"
+                      >
+                        <p className="font-bold mb-1">🎬 {s.name}</p>
+                        <p className="text-xs text-zinc-400">
+                          {s.address || "Posizione scelta sulla mappa"}
+                        </p>
+                      </button>
+                    ))}
+                  </>
+                )}
+                {panel === "activity" && (
+                  <>
+                    {data.events.length === 0 && (
+                      <p className="text-sm text-zinc-400">
+                        Qui troverai recuperi, nuovi set e segnalazioni dei
+                        runner.
+                      </p>
+                    )}
+                    {[...data.events].reverse().map((event) => (
+                      <article
+                        key={event.id}
+                        className="border-l-2 border-yellow-400 pl-4 py-1"
+                      >
+                        <p className="text-sm mb-2">{event.message}</p>
+                        <time className="text-xs text-zinc-500">
+                          {new Date(event.createdAt).toLocaleString("it-IT")}
+                        </time>
+                      </article>
+                    ))}
+                  </>
+                )}
+                {panel === "settings" && (
+                  <ProductionSettings
+                    data={data}
+                    mutate={mutate}
+                    onLogout={onLogout}
+                  />
+                )}
+              </div>
+            </aside>
+          </>
+        )}
+        {editor?.type === "SET" && (
+          <SetBanner
+            key={editor.entity?.id ?? "new-set"}
+            initialSet={editor.entity as SetPoint | undefined}
+            initialLocation={editor.location}
+            onCancel={close}
+            onSave={async (set) => {
+              await mutate({ action: "saveSet", set });
+              close();
+            }}
+          />
+        )}
+        {editor && editor.type !== "SET" && (
+          <PersonBanner
+            key={editor.entity?.id ?? editor.type}
+            type={editor.type}
+            initialPerson={editor.entity as Person | undefined}
+            initialLocation={editor.location}
+            runners={runners}
+            onCancel={close}
+            onSave={async (person) => {
+              await mutate({ action: "savePerson", person });
+              close();
+              setPanel("people");
+            }}
+          />
+        )}
+        {selected && !editor && (
+          <InfoOverlay
+            entity={selected}
+            role={session.role}
+            onClose={close}
+            onEdit={
+              producer
+                ? (entity) => {
+                    setEditor({
+                      type: "category" in entity ? entity.category : "SET",
+                      entity,
+                    });
+                    setSelectedId(null);
+                  }
+                : undefined
+            }
+            onDelete={
+              producer
+                ? async (id) => {
+                    await mutate({
+                      action:
+                        "category" in selected ? "deletePerson" : "deleteSet",
+                      id,
+                    });
+                    close();
+                  }
+                : undefined
+            }
+          />
+        )}
+        {invite && (
+          <div className="fixed inset-0 z-[4000] p-5 bg-black/75 flex items-center justify-center">
+            <section
+              role="dialog"
+              aria-modal="true"
+              aria-label="Invito runner"
+              className="w-full max-w-md bg-zinc-900 border border-zinc-700 rounded-2xl p-5 space-y-4"
+            >
+              <div className="flex justify-between">
+                <h2 className="text-xl font-bold">Invito per {invite.name}</h2>
+                <button
+                  aria-label="Chiudi invito"
+                  onClick={() => setInvite(null)}
+                >
+                  <X size={22} />
+                </button>
+              </div>
+              <p className="text-sm text-zinc-400">
+                Condividi questi codici soltanto con questo runner. L’invito
+                permette l’accesso alla sua squadra. Per revocarlo, creane uno
+                nuovo.
+              </p>
+              <label className="block text-xs text-zinc-400">
+                Produzione
+                <input
+                  readOnly
+                  value={session.roomCode}
+                  className={input + " mt-1 font-mono"}
+                />
+              </label>
+              <label className="block text-xs text-zinc-400">
+                Invito personale
+                <input
+                  readOnly
+                  value={invite.code}
+                  className={input + " mt-1 font-mono"}
+                />
+              </label>
+              <button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(
+                      `RunSet: ${window.location.origin}\nProduzione: ${session.roomCode}\nInvito personale: ${invite.code}`,
+                    );
+                    setCopied(true);
+                  } catch {
+                    setLocalError("Seleziona e copia i codici manualmente.");
+                  }
+                }}
+                className="bg-yellow-400 text-black p-3 rounded-xl w-full font-bold flex justify-center gap-2"
+              >
+                <Copy size={18} />
+                {copied ? "Copiato" : "Copia invito"}
+              </button>
+              <p className="text-xs text-zinc-500">
+                Questo codice viene mostrato solo adesso. Se lo perdi, rinnova
+                l’invito.
+              </p>
+            </section>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

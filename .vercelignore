@@ -1,0 +1,20 @@
+# Source-controlled application files are uploaded; local tooling and secrets are not.
+.cache/
+.vercel/
+.git/
+.codex/
+.agents/
+node_modules/
+dist/
+test-results/
+coverage/
+tests/
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+.env
+.env.*
+*.local
+*.log
+scripts/
