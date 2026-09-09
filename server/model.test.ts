@@ -209,6 +209,34 @@ describe("authorization and state transitions", () => {
         now,
       ),
     ).toThrow("Coordinate"));
+  it("accepts the first GPS fix after invite rotation with a slightly slower device clock", () => {
+    const rotated = mutate(
+      room(),
+      producer,
+      { action: "createInvite", runnerId: "r1", accessCode: "b".repeat(32) },
+      now,
+    );
+    const fix = {
+      action: "location",
+      sharing: true,
+      timestamp: now - 1500,
+      location: { lat: 42, lng: 13 },
+      accuracy: 3,
+    };
+    expect(() => mutate(rotated, runner, fix, now)).toThrow("revocato");
+    const updated = mutate(
+      rotated,
+      { ...runner, inviteHash: hash("b".repeat(32)) },
+      fix,
+      now,
+    );
+    expect(snapshot(updated, producer, 2, now).people[0]).toMatchObject({
+      isLive: true,
+      locationTimestamp: now - 1500,
+      lastSeen: now,
+      location: { lat: 42, lng: 13 },
+    });
+  });
   it("hashes passwords with independent salts", async () => {
     const a = await passwordHash("Password test 123");
     const b = await passwordHash("Password test 123");

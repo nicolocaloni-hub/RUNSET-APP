@@ -293,7 +293,9 @@ export function mutate(
     room.people = room.people.map((p) =>
       p.id === id ? { ...p, isLive: false } : p,
     );
-    (room.sharingUpdates ??= {})[id] = { timestamp: now, sharing: false };
+    // The new invite revokes older sessions. Start a fresh client-clock sequence:
+    // a server timestamp here could reject the new device's first valid fix.
+    (room.sharingUpdates ??= {})[id] = { timestamp: 0, sharing: false };
   } else if (["location", "pickup", "alert"].includes(action)) {
     if (identity.role !== UserRole.RUNNER)
       throw new HttpError(403, "Accedi come runner.");
