@@ -12,6 +12,7 @@ Applicazione web per coordinare i trasporti di una produzione: produttore, runne
 
 ## Funzioni e limiti reali
 
+- Tutorial a popup specifici per produttore e runner: **Continua**, **Indietro**, **Salta** e **Fine**. Si aprono al primo accesso per ciascun ruolo nel browser; il tasto **Tutorial** nella barra in alto li riavvia. La preferenza viene salvata soltanto sul dispositivo.
 - Dati condivisi e persistenti su PostgreSQL Neon, non più `localStorage`/`BroadcastChannel`. Produzioni isolate e permessi verificati dal server. Cookie di sessione HttpOnly/SameSite, Secure su Vercel; password con scrypt e inviti/sessioni salvati come hash.
 - Sincronizzazione tramite richieste HTTPS ogni 3 secondi mentre la pagina è visibile; intervallo maggiore in background. Aggiornamenti GPS limitati a circa uno ogni 3 secondi, con richiesta di un fix fresco ogni 12 secondi. Ritardi dipendono da rete, GPS e carico. Indicazione live rimossa dopo 30 secondi senza aggiornamenti.
 - Il banner di recupero si propone entro **5 metri**, soltanto per persone assegnate e non recuperate, con fix di massimo 15 secondi e precisione dichiarata di massimo 10 metri. La precisione GPS non è una garanzia di distanza: il runner conferma sempre. **No** sospende la proposta finché si allontana di almeno 12 metri. È sempre disponibile la conferma manuale in Squadra.

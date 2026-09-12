@@ -23,6 +23,7 @@ import SetBanner from "./SetBanner";
 import PersonBanner from "./PersonBanner";
 import InfoOverlay from "./InfoOverlay";
 import RapidAlertMenu from "./RapidAlertMenu";
+import Tutorial from "./Tutorial";
 import { NotificationService } from "../services/NotificationService";
 import { distanceMeters, pickupCandidates } from "../services/proximity";
 
@@ -286,11 +287,14 @@ export default function MainLayout({
       : undefined;
   return (
     <div className="h-[100dvh] flex flex-col bg-zinc-950 text-white">
-      <header className="shrink-0 border-b border-zinc-800 bg-zinc-950 z-30 px-3 md:px-5 h-16 flex items-center justify-between gap-3">
+      <header className="shrink-0 border-b border-zinc-800 bg-zinc-950 z-30 px-2 sm:px-3 md:px-5 h-16 flex items-center justify-between gap-2 sm:gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <Clapperboard className="text-yellow-400 shrink-0" size={24} />
+          <Clapperboard
+            className="hidden sm:block text-yellow-400 shrink-0"
+            size={24}
+          />
           <div className="min-w-0">
-            <h1 className="font-black text-xl tracking-tight leading-5">
+            <h1 className="font-black text-xl tracking-tight leading-5 truncate">
               RunSet<span className="text-yellow-400">.</span>
             </h1>
             <p className="text-[11px] text-zinc-400 truncate max-w-[130px] sm:max-w-xs">
@@ -298,7 +302,10 @@ export default function MainLayout({
             </p>
           </div>
         </div>
-        <nav className="flex items-center gap-1.5" aria-label="Menu produzione">
+        <nav
+          className="flex shrink-0 items-center gap-1 sm:gap-1.5"
+          aria-label="Menu produzione"
+        >
           {(
             [
               { key: "people", Icon: Users, label: "Squadra" },
@@ -312,11 +319,12 @@ export default function MainLayout({
               aria-label={label}
               title={label}
               onClick={() => toggle(key)}
-              className={`p-2.5 rounded-xl ${panel === key ? "bg-yellow-400 text-black" : "bg-zinc-900 text-zinc-300"}`}
+              className={`p-2 sm:p-2.5 rounded-xl ${panel === key ? "bg-yellow-400 text-black" : "bg-zinc-900 text-zinc-300"}`}
             >
               <Icon size={19} />
             </button>
           ))}
+          <Tutorial key={session.role} role={session.role} />
         </nav>
       </header>
       <div className="flex-1 min-h-0 relative">

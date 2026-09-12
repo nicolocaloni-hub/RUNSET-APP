@@ -42,7 +42,7 @@ export default function AccessGate({
           <Clapperboard size={32} />
         </div>
         <p className="text-yellow-400 text-xs tracking-[.25em] font-bold">
-          LA TUA REGIA, OVUNQUE.
+          LA TUA PRODUZIONE, OVUNQUE.
         </p>
         <h1 className="text-5xl font-black tracking-tight mt-3 mb-4">
           RunSet<span className="text-yellow-400">.</span>
