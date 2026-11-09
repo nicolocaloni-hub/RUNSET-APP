@@ -1,6 +1,6 @@
 import React from "react";
 import { usePrefs } from "../lib/preferences";
-import { isLive } from "../services/proximity";
+import { distanceMeters, isLive } from "../services/proximity";
 import type { Person } from "../types";
 
 /** Map-tab sheet for the producer: overall progress and one card per runner. */
@@ -58,6 +58,19 @@ export default function ProducerSummary({
             const mine = toPickUp.filter((p) => p.assignedRunnerId === runner.id);
             const mineDone = mine.filter((p) => p.isRecovered).length;
             const live = isLive(runner, now);
+            // Next stop: earliest call time first, otherwise the closest one.
+            const next = mine
+              .filter((p) => !p.isRecovered && p.location)
+              .sort(
+                (a, b) =>
+                  (a.pickupTime ?? "99:99").localeCompare(b.pickupTime ?? "99:99") ||
+                  (runner.location ? distanceMeters(runner.location, a.location!) - distanceMeters(runner.location, b.location!) : 0),
+              )[0];
+            // shortcut: straight-line distance × 1.4 at 20 km/h in town; switch to a routing service for real traffic.
+            const etaMin =
+              live && next && runner.location
+                ? Math.max(1, Math.round((distanceMeters(runner.location, next.location!) * 1.4) / 333))
+                : undefined;
             return (
               <button
                 key={runner.id}
@@ -80,6 +93,11 @@ export default function ProducerSummary({
                     <span className={`block truncate font-mono text-[11px] ${live ? "text-live" : "text-muted"}`}>
                       {live ? t("live").toUpperCase() : t("runner_off")}
                     </span>
+                    {etaMin !== undefined && next && (
+                      <span className="block truncate text-[11px] text-ink2">
+                        → {t("eta", { name: next.name.split(" ")[0], min: etaMin })}
+                      </span>
+                    )}
                   </span>
                 </span>
                 <span className="flex items-center gap-2">

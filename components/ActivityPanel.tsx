@@ -10,6 +10,7 @@ const ACCENT: Record<RunEvent["type"], string> = {
   SET: "border-signal",
   DAY: "border-blue-200",
   ARRIVING: "border-signal",
+  LATE: "border-red-200",
 };
 
 export default function ActivityPanel({ events }: { events: RunEvent[] }) {

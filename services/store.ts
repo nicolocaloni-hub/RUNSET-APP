@@ -23,7 +23,7 @@ const KNOWN_CODES = [
   "already_producer", "runner_required", "invalid_position", "person_not_assigned",
   "pickup_not_found", "undo_not_allowed", "invalid_alert", "alert_throttled",
   "producer_required", "people_limit", "sets_limit", "person_immutable", "config_missing",
-  "geocode_failed", "geocode_rate_limited",
+  "geocode_failed", "geocode_rate_limited", "staff_limit", "invalid_email", "owner_cannot_leave",
 ];
 
 /** Maps Supabase/Postgres/network failures to a translation key. */
@@ -67,6 +67,8 @@ export async function syncClock() {
 // ---------------------------------------------------------------------------
 
 export async function memberships(): Promise<Membership[]> {
+  // Staff invited by email join their productions on sign-in (no-op for runner devices).
+  await client().rpc("claim_staff_invites");
   const rows = check(
     await client()
       .from("members")
@@ -132,6 +134,8 @@ export async function loadSnapshot(membership: Membership): Promise<Snapshot | n
         initials: initials(row.name),
         location: toLocation(row.lat, row.lng),
         assignedRunnerId: row.assigned_runner_id ?? undefined,
+        color: row.color ?? undefined,
+        pickupTime: row.pickup_time?.slice(0, 5) ?? undefined,
       };
       if (row.category === "RUNNER") applyPosition(person, positionByRunner.get(row.id));
       const pickup = pickupByPerson.get(row.id);
@@ -171,6 +175,8 @@ export interface PositionRow {
   accuracy: number | null;
   sharing: boolean;
   updated_at: string;
+  day_meters?: number;
+  meters_day?: number | null;
 }
 interface PersonRow {
   id: string;
@@ -182,6 +188,8 @@ interface PersonRow {
   lat: number | null;
   lng: number | null;
   assigned_runner_id: string | null;
+  color: string | null;
+  pickup_time: string | null;
 }
 interface SetRow {
   id: string;
@@ -207,6 +215,8 @@ export function applyPosition(person: Person, row: PositionRow | undefined) {
   person.sharing = row?.sharing ?? false;
   person.accuracy = row?.accuracy ?? undefined;
   person.lastSeen = row && row.lat !== null ? Date.parse(row.updated_at) : undefined;
+  person.dayMeters = row?.day_meters;
+  person.metersDay = row?.meters_day ?? undefined;
 }
 
 /**
@@ -255,6 +265,7 @@ export const actions = {
       lat: person.category === "RUNNER" ? null : person.location?.lat,
       lng: person.category === "RUNNER" ? null : person.location?.lng,
       assigned_runner_id: person.category === "RUNNER" ? null : person.assignedRunnerId || null,
+      pickup_time: person.category === "RUNNER" ? null : person.pickupTime || null,
     };
     const table = client().from("people");
     check(
@@ -262,6 +273,11 @@ export const actions = {
         ? await table.insert({ ...fields, production_id: productionId, category: person.category })
         : await table.update(fields).eq("id", person.id),
     );
+  },
+  async runners(productionId: string) {
+    return rows(
+      await client().from("people").select("id, name").eq("production_id", productionId).eq("category", "RUNNER"),
+    ) as { id: string; name: string }[];
   },
   async deletePerson(id: string) {
     check(await client().from("people").delete().eq("id", id));
@@ -304,6 +320,24 @@ export const actions = {
   undoPickup: (personId: string) => rpc<void>("undo_pickup", { p_person: personId }),
   sendAlert: (productionId: string, type: AlertType) =>
     rpc<void>("send_alert", { p_production: productionId, p_type: type }),
+  inviteStaff: (productionId: string, email: string) =>
+    rpc<void>("invite_staff", { p_production: productionId, p_email: email }),
+  listStaff: (productionId: string) =>
+    rpc<{ user_id: string; email: string; is_owner: boolean }[]>("list_staff", { p_production: productionId }),
+  async pendingStaff(productionId: string) {
+    return rows(await client().from("staff_invites").select("id, email").eq("production_id", productionId)) as {
+      id: string;
+      email: string;
+    }[];
+  },
+  async cancelStaffInvite(id: string) {
+    check(await client().from("staff_invites").delete().eq("id", id));
+  },
+  removeStaff: (productionId: string, userId: string) =>
+    rpc<void>("remove_staff", { p_production: productionId, p_user: userId }),
+  savePushSubscription: (endpoint: string, p256dh: string, auth: string, lang: string) =>
+    rpc<void>("save_push_subscription", { p_endpoint: endpoint, p_p256dh: p256dh, p_auth: auth, p_lang: lang }),
+  deletePushSubscription: (endpoint: string) => rpc<void>("delete_push_subscription", { p_endpoint: endpoint }),
   startNewDay: (productionId: string) => rpc<number>("start_new_day", { p_production: productionId }),
   reportPosition: (productionId: string, sharing: boolean, timestamp: number, fix?: { lat: number; lng: number; accuracy: number }) =>
     rpc<void>("report_position", {

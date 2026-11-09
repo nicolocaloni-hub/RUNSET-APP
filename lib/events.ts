@@ -19,5 +19,11 @@ export function eventText(event: RunEvent, t: T): string {
       return t("ev_DAY", { day });
     case "ARRIVING":
       return t("ev_ARRIVING", { runner, person, meters: event.data.meters ?? "" });
+    case "LATE": {
+      const { meters, time = "" } = event.data;
+      return meters == null
+        ? t("ev_LATE_nogps", { person, runner, time })
+        : t("ev_LATE", { person, runner, time, km: (meters / 1000).toFixed(1) });
+    }
   }
 }

@@ -10,8 +10,9 @@ const migrations = join(import.meta.dirname, "../migrations");
 const bootstrap = `
   create role anon nologin;
   create role authenticated nologin;
+  create role service_role nologin;
   create schema auth;
-  create table auth.users (id uuid primary key);
+  create table auth.users (id uuid primary key, email text);
   create function auth.jwt() returns jsonb language sql stable as
     $$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
   create function auth.uid() returns uuid language sql stable as
@@ -198,6 +199,25 @@ describe("posizione GPS", () => {
     expect(await arriving()).toHaveLength(1);
   });
 
+  it("somma i metri percorsi nella giornata ignorando il rumore del GPS", async () => {
+    const meters = async () =>
+      (await db.query<{ day_meters: number }>("select day_meters from public.runner_positions")).rows[0].day_meters;
+    const send = async (ms: number, lat: number) => {
+      await db.query("update public.runner_positions set updated_at = now() - interval '5 seconds'");
+      await rpc(RUNNER_DEVICE, "public.report_position($1,true,$2,$3,12.5,8)", [production, at(ms), lat], true);
+    };
+    await send(50_000, 41.95);
+    const start = await meters();
+    await send(60_000, 41.95005); // ~6 m: rumore, non conta
+    expect(await meters()).toBe(start);
+    await send(70_000, 41.951); // ~111 m dall'ancora
+    await send(80_000, 41.952); // altri ~111 m
+    expect(await meters()).toBeGreaterThan(start + 215);
+    expect(await meters()).toBeLessThan(start + 230);
+    await send(90_000, 42.2); // salto di ~27 km: ignorato
+    expect(await meters()).toBeLessThan(start + 230);
+  });
+
   it("il produttore non può inviare posizioni", async () => {
     await expect(rpc(PRODUCER, "public.report_position($1,false,$2)", [production, at(0)])).rejects.toThrow(/runner_required/);
   });
@@ -248,6 +268,101 @@ describe("conservazione dati", () => {
     await db.query("select private.purge_old_data()");
     expect((await db.query("select id from public.events where type='ALERT'")).rows).toEqual([]);
     expect((await db.query("select lat from public.runner_positions")).rows).toEqual([{ lat: null }]);
+  });
+});
+
+describe("colori, orari e ritardi", () => {
+  it("ogni runner riceve un colore fisso e diverso", async () => {
+    const [{ color }] = await as<{ color: string }>(PRODUCER, "select color from public.people where id=$1", [runner]);
+    expect(color).toBe("#FF5B1F");
+    const [second] = await as<{ color: string }>(
+      PRODUCER,
+      "insert into public.people(production_id,category,name) values ($1,'RUNNER','Marta Seconda') returning color",
+      [production],
+    );
+    expect(second.color).toBe("#2563EB");
+  });
+
+  it("avvisa una volta se il runner è lontano a ridosso della convocazione", async () => {
+    const [{ id }] = await as<{ id: string }>(
+      PRODUCER,
+      `insert into public.people(production_id,category,name,lat,lng,assigned_runner_id,pickup_time)
+       values ($1,'ACTOR','Tina Ritardo',45.46,9.19,$2,((now() at time zone 'Europe/Rome') + interval '5 minutes')::time)
+       returning id`,
+      [production, runner],
+    );
+    await db.query("select private.check_late()");
+    await db.query("select private.check_late()");
+    const late = (await db.query<{ data: { person: string } }>(
+      "select data from public.events where type='LATE' and person_id=$1",
+      [id],
+    )).rows;
+    expect(late).toHaveLength(1);
+    expect(late[0].data.person).toBe("Tina Ritardo");
+  });
+
+  it("un runner non può avere un orario di convocazione", async () => {
+    await expect(
+      as(PRODUCER, "update public.people set pickup_time='08:00' where id=$1", [runner]),
+    ).rejects.toThrow(/people_pickup_time_check/);
+  });
+});
+
+describe("assistenti di produzione", () => {
+  const ASSISTANT = "00000000-0000-4000-8000-000000000005";
+  const asAssistant = async (sql: string, params: unknown[] = []) => {
+    await db.exec("reset role");
+    await db.query("select set_config('request.jwt.claims', $1, false)", [
+      JSON.stringify({ sub: ASSISTANT, role: "authenticated", email: "Assistente@Example.com", is_anonymous: false }),
+    ]);
+    await db.exec("set role authenticated");
+    try {
+      return (await db.query<Record<string, unknown>>(sql, params)).rows;
+    } finally {
+      await db.exec("reset role");
+    }
+  };
+
+  it("l'email invitata diventa produttore al primo accesso ma non può eliminare la produzione", async () => {
+    await db.query("insert into auth.users(id, email) values ($1, 'assistente@example.com')", [ASSISTANT]);
+    await rpc(PRODUCER, "public.invite_staff($1,$2)", [production, " Assistente@Example.com "]);
+    expect(await asAssistant("select id from public.productions")).toEqual([]);
+    expect(await asAssistant("select public.claim_staff_invites() as n")).toEqual([{ n: 1 }]);
+    expect(await asAssistant("select id from public.productions")).toEqual([{ id: production }]);
+    expect(await asAssistant("delete from public.productions where id=$1 returning id", [production])).toEqual([]);
+    const staff = await as<{ is_owner: boolean }>(PRODUCER, "select is_owner from public.list_staff($1)", [production]);
+    expect(staff.map((s) => s.is_owner)).toEqual([true, false]);
+  });
+
+  it("il titolare non può essere rimosso; l'assistente sì", async () => {
+    await expect(rpc(PRODUCER, "public.remove_staff($1,$2)", [production, PRODUCER])).rejects.toThrow(/owner_cannot_leave/);
+    await rpc(PRODUCER, "public.remove_staff($1,$2)", [production, ASSISTANT]);
+    expect(await asAssistant("select id from public.productions")).toEqual([]);
+  });
+
+  it("un runner non può invitare assistenti", async () => {
+    await expect(
+      rpc(RUNNER_DEVICE, "public.invite_staff($1,$2)", [production, "x@example.com"], true),
+    ).rejects.toThrow(/producer_required/);
+  });
+});
+
+describe("notifiche push", () => {
+  it("il produttore salva un'iscrizione, un account anonimo no", async () => {
+    await rpc(PRODUCER, "public.save_push_subscription($1,$2,$3,$4)", ["https://push.example/abc", "k", "a", "it"]);
+    expect((await db.query("select user_id from public.push_subscriptions")).rows).toEqual([{ user_id: PRODUCER }]);
+    await expect(
+      rpc(ANON, "public.save_push_subscription($1,$2,$3,$4)", ["https://push.example/x", "k", "a", "it"], true),
+    ).rejects.toThrow(/producer_account_required/);
+    // Subscription keys are never readable from the client, not even your own.
+    await expect(as(PRODUCER, "select * from public.push_subscriptions")).rejects.toThrow(/permission denied/);
+  });
+
+  it("il trigger push non blocca gli eventi", async () => {
+    const before = (await db.query("select count(*)::int as n from public.events")).rows[0] as { n: number };
+    await db.query("insert into public.events(production_id, type, data) values ($1, 'ALERT', '{}')", [production]);
+    const after = (await db.query("select count(*)::int as n from public.events")).rows[0] as { n: number };
+    expect(after.n).toBe(before.n + 1);
   });
 });
 

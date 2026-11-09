@@ -22,8 +22,12 @@ export default function RunnerDock({
 }) {
   const { t, formatTime } = usePrefs();
   const done = assigned.filter((p) => p.isRecovered).length;
-  // Still to pick up first, then the ones already in the car.
-  const ordered = [...assigned].sort((a, b) => Number(!!a.isRecovered) - Number(!!b.isRecovered));
+  // Still to pick up first, by call time; then the ones already in the car.
+  const ordered = [...assigned].sort(
+    (a, b) =>
+      Number(!!a.isRecovered) - Number(!!b.isRecovered) ||
+      (a.pickupTime ?? "99:99").localeCompare(b.pickupTime ?? "99:99"),
+  );
   return (
     <section
       aria-label={t("gps_share")}
@@ -77,7 +81,9 @@ export default function RunnerDock({
                 <span className="min-w-0">
                   <span className="block truncate text-[15px] font-semibold">{p.name}</span>
                   <span className="block truncate text-xs text-muted">
-                    {p.isRecovered && p.recoveredAt ? t("recovered_at", { time: formatTime(p.recoveredAt) }) : p.address}
+                    {p.isRecovered && p.recoveredAt
+                      ? t("recovered_at", { time: formatTime(p.recoveredAt) })
+                      : [p.pickupTime, p.address].filter(Boolean).join(" · ")}
                   </span>
                 </span>
               </button>

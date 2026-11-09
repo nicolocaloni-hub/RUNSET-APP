@@ -33,6 +33,7 @@ export default function PersonBanner({
     phone: initialPerson?.phone ?? "",
     address: initialPerson?.address ?? "",
     assignedRunnerId: initialPerson?.assignedRunnerId ?? "",
+    pickupTime: initialPerson?.pickupTime ?? "",
   });
   const [location, setLocation] = useState<Location | undefined>(
     runner ? undefined : (initialLocation ?? initialPerson?.location),
@@ -64,6 +65,7 @@ export default function PersonBanner({
           address: form.address.trim(),
           category: type,
           assignedRunnerId: runner ? undefined : form.assignedRunnerId || undefined,
+          pickupTime: runner ? undefined : form.pickupTime || undefined,
           location: runner ? undefined : location,
         },
         !initialPerson,
@@ -159,6 +161,17 @@ export default function PersonBanner({
                   </option>
                 ))}
               </select>
+            </label>
+          )}
+          {!runner && (
+            <label className={fieldLabel}>
+              {t("pickup_time")}
+              <input
+                type="time"
+                value={form.pickupTime}
+                onChange={(e) => setForm({ ...form, pickupTime: e.target.value })}
+                className={field}
+              />
             </label>
           )}
         </div>

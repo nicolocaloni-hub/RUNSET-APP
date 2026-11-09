@@ -1,13 +1,15 @@
-import React, { useState } from "react";
-import { ArrowLeftRight, Bell, CalendarPlus, Languages, LogOut, Moon, Sun, Trash2 } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { ArrowLeftRight, Bell, BellOff, CalendarPlus, Languages, LogOut, Moon, Sun, Trash2 } from "lucide-react";
 import { client } from "../lib/supabase";
 import { usePrefs } from "../lib/preferences";
+import { disablePush, enablePush, pushEnabled } from "../lib/push";
 import { NotificationService } from "../services/NotificationService";
 import type { Snapshot } from "../services/protocol";
 import { actions, errorCode } from "../services/store";
 import { UserRole } from "../types";
 import PasswordForm from "./PasswordForm";
 import PrivacyDialog from "./PrivacyDialog";
+import StaffSection from "./StaffSection";
 import { dangerButton, field, fieldLabel, primaryButton, secondaryButton } from "./ui";
 
 export default function SettingsPanel({
@@ -32,6 +34,10 @@ export default function SettingsPanel({
   });
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const [push, setPush] = useState(false);
+  useEffect(() => {
+    pushEnabled().then(setPush, () => setPush(false));
+  }, []);
 
   async function attempt(action: () => Promise<unknown>, success?: string) {
     setBusy(true);
@@ -111,6 +117,8 @@ export default function SettingsPanel({
         </section>
       )}
 
+      {producer && <StaffSection productionId={id} />}
+
       {status && (
         <p role="status" className="text-sm text-signal-text">
           {status}
@@ -138,16 +146,39 @@ export default function SettingsPanel({
             <option value="en">English</option>
           </select>
         </label>
-        <button
-          type="button"
-          onClick={async () =>
-            setStatus((await NotificationService.requestPermission()) ? t("notifications_on") : t("notifications_off"))
-          }
-          className="flex w-full items-center gap-3 rounded-xl bg-ground p-3"
-        >
-          <Bell size={18} />
-          {t("notifications_enable")}
-        </button>
+        {producer ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              void attempt(async () => {
+                if (push) {
+                  await disablePush();
+                  setPush(false);
+                  return;
+                }
+                const result = await enablePush(language);
+                setPush(result === "on");
+                setStatus(t(result === "on" ? "push_on" : result === "denied" ? "push_denied" : "push_unsupported"));
+              })
+            }
+            className="flex w-full items-center gap-3 rounded-xl bg-ground p-3"
+          >
+            {push ? <BellOff size={18} /> : <Bell size={18} />}
+            {push ? t("push_disable") : t("push_enable")}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={async () =>
+              setStatus((await NotificationService.requestPermission()) ? t("notifications_on") : t("notifications_off"))
+            }
+            className="flex w-full items-center gap-3 rounded-xl bg-ground p-3"
+          >
+            <Bell size={18} />
+            {t("notifications_enable")}
+          </button>
+        )}
         <p className="text-xs leading-relaxed text-muted">{t("notifications_note")}</p>
       </section>
 

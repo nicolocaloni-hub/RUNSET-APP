@@ -15,6 +15,7 @@ import {
 import { actions, errorCode, type Membership, serverNow } from "../services/store";
 import { Category, Location, Person, SetPoint, UserRole } from "../types";
 import ActivityPanel from "./ActivityPanel";
+import ImportCsv from "./ImportCsv";
 import InfoOverlay from "./InfoOverlay";
 import InviteDialog from "./InviteDialog";
 import MapLayer from "./MapLayer";
@@ -22,6 +23,7 @@ import PeoplePanel from "./PeoplePanel";
 import PersonBanner from "./PersonBanner";
 import PickupPrompt from "./PickupPrompt";
 import ProducerSummary from "./ProducerSummary";
+import DaySummary from "./DaySummary";
 import RapidAlertMenu from "./RapidAlertMenu";
 import RunnerDock from "./RunnerDock";
 import SetBanner from "./SetBanner";
@@ -33,6 +35,25 @@ import { primaryButton, secondaryButton } from "./ui";
 type Editor = { type: "SET" | Category; entity?: Person | SetPoint; location?: Location };
 type Panel = "people" | "sets" | "activity" | "settings" | null;
 const GPS_CONSENT_KEY = "runset:gps-consent:v1";
+
+// Pickups confirmed without signal wait on this device and are sent when the network is back.
+const queueKey = (productionId: string) => `runset:pickup-queue:${productionId}`;
+function readQueue(productionId: string): string[] {
+  try {
+    const value = JSON.parse(localStorage.getItem(queueKey(productionId)) ?? "[]");
+    return Array.isArray(value) ? value.filter((id) => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+function writeQueue(productionId: string, ids: string[]) {
+  try {
+    if (ids.length) localStorage.setItem(queueKey(productionId), JSON.stringify(ids));
+    else localStorage.removeItem(queueKey(productionId));
+  } catch {
+    /* Storage blocked: the pickup stays only in memory for this session. */
+  }
+}
 
 export function CenteredMessage({ text, children }: { text: string; children?: React.ReactNode }) {
   return (
@@ -163,10 +184,14 @@ function Workspace({
     const fresh = data.events.filter((e) => !seen.current!.has(e.id));
     for (const event of fresh) seen.current.add(event.id);
     // "Arriving" alerts are for the producer; the runner already knows where they are.
-    const shown = fresh.filter((e) => producer || e.type !== "ARRIVING");
+    const shown = fresh.filter((e) => producer || (e.type !== "ARRIVING" && e.type !== "LATE"));
     for (const event of shown) {
       const title =
-        event.type === "PICKUP" ? t("notify_pickup_title") : event.type === "ARRIVING" ? t("notify_arriving_title") : "RunSet";
+        event.type === "PICKUP" ? t("notify_pickup_title") : event.type === "ARRIVING"
+            ? t("notify_arriving_title")
+            : event.type === "LATE"
+              ? t("notify_late_title")
+              : "RunSet";
       NotificationService.show(title, eventText(event, t), event.id);
     }
     if (shown.length) setNotice(eventText(shown[shown.length - 1], t));
@@ -209,9 +234,47 @@ function Workspace({
   }
   const pickup = (person: Person) =>
     attempt(async () => {
-      await run(() => actions.confirmPickup(person.id));
+      try {
+        await run(() => actions.confirmPickup(person.id));
+      } catch (cause) {
+        if (errorCode(cause) !== "network") throw cause;
+        writeQueue(productionId, [...new Set([...readQueue(productionId), person.id])]);
+        setNotice(t("offline_queued", { name: person.name }));
+      }
       setDismissed((s) => new Set(s).add(person.id));
     });
+
+  // Send queued pickups when the connection returns (confirm_pickup is idempotent).
+  useEffect(() => {
+    if (producer) return;
+    let sending = false;
+    const flush = async () => {
+      const queued = readQueue(productionId);
+      if (sending || queued.length === 0 || !navigator.onLine) return;
+      sending = true;
+      const left: string[] = [];
+      for (const id of queued) {
+        try {
+          await actions.confirmPickup(id);
+        } catch (cause) {
+          if (errorCode(cause) === "network") left.push(id);
+        }
+      }
+      writeQueue(productionId, left);
+      sending = false;
+      if (left.length < queued.length) {
+        setNotice(t("offline_sent"));
+        void run(async () => undefined);
+      }
+    };
+    void flush();
+    window.addEventListener("online", flush);
+    const timer = setInterval(flush, 20_000);
+    return () => {
+      window.removeEventListener("online", flush);
+      clearInterval(timer);
+    };
+  }, [producer, productionId, run, t]);
   const makeInvite = (runner: Person) => {
     if (!window.confirm(t("invite_confirm", { name: runner.name }))) return;
     void attempt(async () => {
@@ -455,7 +518,16 @@ function Workspace({
                     onPickup={(person) => void pickup(person)}
                   />
                 )}
+                {panel === "people" && producer && <ImportCsv productionId={productionId} people={people} run={run} />}
                 {panel === "sets" && <SetsPanel sets={sets} producer={producer} onAdd={() => add("SET")} onSelect={select} />}
+                {panel === "activity" && producer && (
+                  <DaySummary
+                    people={people}
+                    dayNumber={session.dayNumber}
+                    productionName={session.productionName}
+                    colors={colors}
+                  />
+                )}
                 {panel === "activity" && <ActivityPanel events={data.events} />}
                 {panel === "settings" && (
                   <SettingsPanel data={data} run={run} onLogout={onLogout} onSwitch={onSwitch} />
