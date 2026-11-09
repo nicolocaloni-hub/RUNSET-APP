@@ -1,233 +1,173 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Bell,
-  Check,
-  ChevronRight,
-  Clapperboard,
-  Copy,
-  LogOut,
-  Moon,
-  Plus,
-  Settings,
-  Sun,
-  Users,
-  Wifi,
-  WifiOff,
-  X,
-} from "lucide-react";
-import { Person, SetPoint, Location, UserRole } from "../types";
-import { Snapshot } from "../services/protocol";
-import { useLanguage } from "../App";
-import MapLayer from "./MapLayer";
-import SetBanner from "./SetBanner";
-import PersonBanner from "./PersonBanner";
-import InfoOverlay from "./InfoOverlay";
-import RapidAlertMenu from "./RapidAlertMenu";
-import Tutorial from "./Tutorial";
+import { Bell, Clapperboard, Plus, Settings, Users, Wifi, WifiOff, X } from "lucide-react";
+import { useProduction } from "../hooks/useProduction";
+import { useRunnerGps } from "../hooks/useRunnerGps";
+import { eventText } from "../lib/events";
+import { usePrefs } from "../lib/preferences";
 import { NotificationService } from "../services/NotificationService";
-import { distanceMeters, pickupCandidates } from "../services/proximity";
+import type { Snapshot } from "../services/protocol";
+import {
+  distanceMeters,
+  PICKUP_DISMISS_RESET_METERS,
+  pickupCandidates,
+} from "../services/proximity";
+import { actions, errorCode, type Membership, serverNow } from "../services/store";
+import { Category, Location, Person, SetPoint, UserRole } from "../types";
+import ActivityPanel from "./ActivityPanel";
+import InfoOverlay from "./InfoOverlay";
+import InviteDialog from "./InviteDialog";
+import MapLayer from "./MapLayer";
+import PeoplePanel from "./PeoplePanel";
+import PersonBanner from "./PersonBanner";
+import PickupPrompt from "./PickupPrompt";
+import RapidAlertMenu from "./RapidAlertMenu";
+import RunnerDock from "./RunnerDock";
+import SetBanner from "./SetBanner";
+import SetsPanel from "./SetsPanel";
+import SettingsPanel from "./SettingsPanel";
+import Tutorial from "./Tutorial";
+import { primaryButton, secondaryButton } from "./ui";
 
-type Mutation = (body: Record<string, unknown>) => Promise<Snapshot>;
-interface Props {
-  data: Snapshot;
-  mutate: Mutation;
-  onLogout: () => Promise<void>;
-  sharing: boolean;
-  onSharingChange: (v: boolean) => void;
-  gpsStatus: string;
-  online: boolean;
-  error: string;
-  now: number;
-}
-type Editor = {
-  type: "SET" | "RUNNER" | "ACTOR" | "TROUPE";
-  entity?: Person | SetPoint;
-  location?: Location;
-};
+type Editor = { type: "SET" | Category; entity?: Person | SetPoint; location?: Location };
 type Panel = "people" | "sets" | "activity" | "settings" | null;
-const input =
-  "w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm";
+const GPS_CONSENT_KEY = "runset:gps-consent:v1";
 
-function ProductionSettings({
-  data,
-  mutate,
-  onLogout,
-}: {
-  data: Snapshot;
-  mutate: Mutation;
-  onLogout: () => Promise<void>;
-}) {
-  const { mapTheme, setMapTheme } = useLanguage();
-  const [info, setInfo] = useState(data.producerInfo);
-  const [status, setStatus] = useState("");
-  const [busy, setBusy] = useState(false);
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      await mutate({ action: "saveProducer", producerInfo: info });
-      setStatus("Contatti salvati.");
-    } catch (e) {
-      setStatus((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
+export function CenteredMessage({ text, children }: { text: string; children?: React.ReactNode }) {
   return (
-    <div className="space-y-6">
-      <div>
-        <p className="text-xs text-zinc-400 mb-2">CODICE PRODUZIONE</p>
-        <p className="font-mono text-xl text-yellow-400 select-all break-all">
-          {data.session.roomCode}
-        </p>
-        <p className="text-xs text-zinc-500 mt-2">
-          Conservalo insieme alla password per accedere dagli altri dispositivi.
-        </p>
-      </div>
-      {data.session.role === UserRole.PRODUCER && (
-        <form onSubmit={save} className="space-y-3">
-          <label className="block text-sm">
-            Nome produttore
-            <input
-              className={input + " mt-2"}
-              value={info.name}
-              onChange={(e) => setInfo({ ...info, name: e.target.value })}
-              required
-              maxLength={120}
-            />
-          </label>
-          <label className="block text-sm">
-            Telefono produttore
-            <input
-              className={input + " mt-2"}
-              type="tel"
-              value={info.phone}
-              onChange={(e) => setInfo({ ...info, phone: e.target.value })}
-              maxLength={40}
-            />
-          </label>
-          <button
-            disabled={busy}
-            className="bg-yellow-400 text-black p-3 rounded-xl font-semibold w-full"
-          >
-            {busy ? "Salvataggio…" : "Salva contatti"}
-          </button>
-        </form>
-      )}
-      <button
-        onClick={() => setMapTheme(mapTheme === "dark" ? "light" : "dark")}
-        className="w-full flex items-center gap-3 rounded-xl bg-zinc-800 p-3"
-      >
-        {mapTheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}Mappa{" "}
-        {mapTheme === "dark" ? "chiara" : "scura"}
-      </button>
-      <button
-        onClick={async () =>
-          setStatus(
-            (await NotificationService.requestPermission())
-              ? "Notifiche browser abilitate."
-              : "Le notifiche restano disponibili nel pannello Attività.",
-          )
-        }
-        className="w-full flex items-center gap-3 rounded-xl bg-zinc-800 p-3"
-      >
-        <Bell size={18} />
-        Abilita notifiche browser
-      </button>
-      <p className="text-xs text-zinc-400 leading-relaxed">
-        Gli avvisi sono sempre salvati in Attività. Le notifiche del browser
-        dipendono dal dispositivo e richiedono l’app aperta. Il GPS in una
-        pagina web non è garantito con schermo bloccato o app in secondo piano.
+    <main className="flex h-[100dvh] flex-col items-center justify-center gap-5 bg-zinc-950 p-6 text-center">
+      <p className="max-w-sm text-zinc-200" role="status">
+        {text}
       </p>
-      {status && (
-        <p role="status" className="text-sm text-yellow-200">
-          {status}
-        </p>
-      )}
-      <button
-        onClick={() => void onLogout()}
-        className="w-full flex items-center gap-3 rounded-xl border border-zinc-700 p-3 text-zinc-300"
-      >
-        <LogOut size={18} />
-        Esci dalla produzione
-      </button>
-    </div>
+      {children}
+    </main>
   );
 }
 
 export default function MainLayout({
-  data,
-  mutate,
+  membership,
   onLogout,
-  sharing,
-  onSharingChange,
-  gpsStatus,
-  online,
-  error,
-  now,
-}: Props) {
-  const { mapTheme } = useLanguage();
+  onSwitch,
+}: {
+  membership: Membership;
+  onLogout: () => Promise<void>;
+  onSwitch?: () => void;
+}) {
+  const { t, tError } = usePrefs();
+  const production = useProduction(membership);
+  if (production.status === "loading") return <CenteredMessage text={t("loading")} />;
+  if (production.status === "revoked")
+    return (
+      <CenteredMessage text={t("access_revoked")}>
+        {onSwitch && (
+          <button type="button" onClick={onSwitch} className={primaryButton}>
+            {t("switch_production")}
+          </button>
+        )}
+        <button type="button" onClick={() => void onLogout()} className={secondaryButton}>
+          {t("sign_out")}
+        </button>
+      </CenteredMessage>
+    );
+  if (!production.snapshot)
+    return (
+      <CenteredMessage text={tError(production.error)}>
+        <button type="button" onClick={() => void production.reload()} className={primaryButton}>
+          {t("retry")}
+        </button>
+      </CenteredMessage>
+    );
+  return (
+    <Workspace
+      data={production.snapshot}
+      connected={production.connected}
+      loadError={production.error}
+      run={production.run}
+      onLogout={onLogout}
+      onSwitch={onSwitch}
+    />
+  );
+}
+
+function Workspace({
+  data,
+  connected,
+  loadError,
+  run,
+  onLogout,
+  onSwitch,
+}: {
+  data: Snapshot;
+  connected: boolean;
+  loadError: string;
+  run: <T>(write: () => Promise<T>) => Promise<T>;
+  onLogout: () => Promise<void>;
+  onSwitch?: () => void;
+}) {
+  const { t, tError, mapTheme } = usePrefs();
   const { people, sets, session } = data;
   const producer = session.role === UserRole.PRODUCER;
-  const [panel, setPanel] = useState<Panel>(() =>
-    window.matchMedia("(min-width:768px)").matches ? "people" : null,
-  );
+  const productionId = session.productionId;
+  const [now, setNow] = useState(serverNow);
+  const [panel, setPanel] = useState<Panel>(() => (window.matchMedia("(min-width:768px)").matches ? "people" : null));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [point, setPoint] = useState<Location | null>(null);
   const [filter, setFilter] = useState("");
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState("");
-  const [invite, setInvite] = useState<{ name: string; code: string } | null>(
-    null,
-  );
-  const [copied, setCopied] = useState(false);
-  const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
-  const lastNotice = useRef(0);
   const [notice, setNotice] = useState("");
+  const [invite, setInvite] = useState<{ name: string; token: string } | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
+  const gps = useRunnerGps(productionId, sharing && !producer, () => setSharing(false));
+
+  useEffect(() => {
+    const tick = setInterval(() => setNow(serverNow()), 3000);
+    return () => clearInterval(tick);
+  }, []);
+
   const active = people.find((p) => p.id === session.runnerId);
   const runners = people.filter((p) => p.category === "RUNNER");
-  const selected =
-    people.find((p) => p.id === selectedId) ??
-    sets.find((s) => s.id === selectedId);
+  const selected = people.find((p) => p.id === selectedId) ?? sets.find((s) => s.id === selectedId);
   const visible = useMemo(
-    () =>
-      filter
-        ? people.filter((p) => p.id === filter || p.assignedRunnerId === filter)
-        : people,
+    () => (filter ? people.filter((p) => p.id === filter || p.assignedRunnerId === filter) : people),
     [people, filter],
   );
-  const candidates = sharing ? pickupCandidates(active, people, now) : [];
+  const candidates = sharing ? pickupCandidates(gps.fix, session.runnerId, people, Date.now()) : [];
   const candidate = candidates.find((p) => !dismissed.has(p.id));
+
+  // A dismissed suggestion comes back once the runner has moved away and returned.
   useEffect(() => {
-    if (!active) return;
-    setDismissed((previous) => {
-      const remaining = new Set(
-        [...previous].filter((id) => {
-          const p = people.find((x) => x.id === id);
-          return (
-            p &&
-            !p.isRecovered &&
-            distanceMeters(active.location, p.location) < 12
-          );
-        }),
-      );
-      return remaining.size === previous.size ? previous : remaining;
-    });
-  }, [active, people]);
+    if (!gps.fix || dismissed.size === 0) return;
+    const remaining = new Set(
+      [...dismissed].filter((id) => {
+        const person = people.find((p) => p.id === id);
+        return person && !person.isRecovered && distanceMeters(gps.fix!.location, person.location) < PICKUP_DISMISS_RESET_METERS;
+      }),
+    );
+    if (remaining.size !== dismissed.size) setDismissed(remaining);
+  }, [gps.fix, people, dismissed]);
+
+  // Notify about events that arrive after the first load.
+  const seen = useRef<Set<string> | null>(null);
   useEffect(() => {
-    const latest = data.events.at(-1);
-    if (!latest) return;
-    if (lastNotice.current && latest.createdAt > lastNotice.current)
-      setNotice(latest.message);
-    lastNotice.current = latest.createdAt;
-  }, [data.events]);
+    if (!seen.current) {
+      seen.current = new Set(data.events.map((e) => e.id));
+      return;
+    }
+    const fresh = data.events.filter((e) => !seen.current!.has(e.id));
+    for (const event of fresh) {
+      seen.current.add(event.id);
+      NotificationService.show(event.type === "PICKUP" ? t("notify_pickup_title") : "RunSet", eventText(event, t), event.id);
+    }
+    if (fresh.length) setNotice(eventText(fresh[fresh.length - 1], t));
+  }, [data.events, t]);
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 8000);
     return () => clearTimeout(timer);
   }, [notice]);
-  const toggle = (next: Panel) => setPanel(panel === next ? null : next);
+
   const close = () => {
     setSelectedId(null);
     setEditor(null);
@@ -244,82 +184,89 @@ export default function MainLayout({
     setEditor(null);
     setPanel(null);
   };
-  async function pickup(person: Person) {
+  async function attempt(action: () => Promise<unknown>) {
     if (busy) return;
     setBusy(true);
     setLocalError("");
     try {
-      await mutate({ action: "pickup", personId: person.id });
+      await action();
+    } catch (cause) {
+      setLocalError(tError(errorCode(cause)));
+    } finally {
+      setBusy(false);
+    }
+  }
+  const pickup = (person: Person) =>
+    attempt(async () => {
+      await run(() => actions.confirmPickup(person.id));
       setDismissed((s) => new Set(s).add(person.id));
-    } catch (e) {
-      setLocalError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function makeInvite(runner: Person) {
-    if (
-      !window.confirm(
-        `Creare un nuovo invito per ${runner.name}? Gli accessi precedenti di questo runner saranno revocati.`,
-      )
-    )
-      return;
-    setBusy(true);
+    });
+  const makeInvite = (runner: Person) => {
+    if (!window.confirm(t("invite_confirm", { name: runner.name }))) return;
+    void attempt(async () => {
+      const token = await run(() => actions.createInvite(runner.id));
+      setInvite({ name: runner.name, token });
+    });
+  };
+  const toggleSharing = () => {
+    if (sharing) return setSharing(false);
+    let agreed = false;
     try {
-      const next = await mutate({
-        action: "createInvite",
-        runnerId: runner.id,
-      });
-      setInvite({ name: runner.name, code: next.accessCode! });
-      setCopied(false);
-    } catch (e) {
-      setLocalError((e as Error).message);
-    } finally {
-      setBusy(false);
+      agreed = localStorage.getItem(GPS_CONSENT_KEY) === "yes";
+    } catch {
+      /* Storage blocked: ask every time. */
     }
-  }
+    if (!agreed && !window.confirm(t("gps_consent"))) return;
+    try {
+      localStorage.setItem(GPS_CONSENT_KEY, "yes");
+    } catch {
+      /* Storage blocked: ask again next time. */
+    }
+    setSharing(true);
+  };
+
   const focus =
-    selected &&
-    (!("category" in selected) ||
-      selected.category !== "RUNNER" ||
-      selected.lastSeen)
+    selected && (!("category" in selected) || selected.category !== "RUNNER" || selected.lastSeen)
       ? selected.location
       : undefined;
+  const nav = [
+    { key: "people", Icon: Users, label: t("nav_people") },
+    { key: "sets", Icon: Clapperboard, label: t("nav_sets") },
+    { key: "activity", Icon: Bell, label: t("nav_activity") },
+    { key: "settings", Icon: Settings, label: t("nav_settings") },
+  ] as const;
+  const panelTitle = {
+    people: t("nav_people"),
+    sets: t("sets_title"),
+    activity: t("nav_activity"),
+    settings: t("nav_settings"),
+  };
+  const errorText = localError || (loadError ? tError(loadError) : "");
+
   return (
-    <div className="h-[100dvh] flex flex-col bg-zinc-950 text-white">
-      <header className="shrink-0 border-b border-zinc-800 bg-zinc-950 z-30 px-2 sm:px-3 md:px-5 h-16 flex items-center justify-between gap-2 sm:gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <Clapperboard
-            className="hidden sm:block text-yellow-400 shrink-0"
-            size={24}
-          />
+    <div className="flex h-[100dvh] flex-col bg-zinc-950 text-white">
+      <header className="z-30 flex h-16 shrink-0 items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-950 px-2 sm:gap-3 sm:px-3 md:px-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <Clapperboard className="hidden shrink-0 text-yellow-400 sm:block" size={24} />
           <div className="min-w-0">
-            <h1 className="font-black text-xl tracking-tight leading-5 truncate">
+            <h1 className="truncate text-xl font-black leading-5 tracking-tight">
               RunSet<span className="text-yellow-400">.</span>
             </h1>
-            <p className="text-[11px] text-zinc-400 truncate max-w-[130px] sm:max-w-xs">
-              {session.roomName}
+            <p className="max-w-[130px] truncate text-[11px] text-zinc-400 sm:max-w-xs">
+              {session.productionName} · {t("day_label", { day: session.dayNumber })}
             </p>
           </div>
         </div>
-        <nav
-          className="flex shrink-0 items-center gap-1 sm:gap-1.5"
-          aria-label="Menu produzione"
-        >
-          {(
-            [
-              { key: "people", Icon: Users, label: "Squadra" },
-              { key: "sets", Icon: Clapperboard, label: "Set" },
-              { key: "activity", Icon: Bell, label: "Attività" },
-              { key: "settings", Icon: Settings, label: "Impostazioni" },
-            ] as const
-          ).map(({ key, Icon, label }) => (
+        <nav className="flex shrink-0 items-center gap-1 sm:gap-1.5" aria-label={t("menu_label")}>
+          {nav.map(({ key, Icon, label }) => (
             <button
               key={key}
+              type="button"
               aria-label={label}
+              aria-pressed={panel === key}
               title={label}
-              onClick={() => toggle(key)}
-              className={`p-2 sm:p-2.5 rounded-xl ${panel === key ? "bg-yellow-400 text-black" : "bg-zinc-900 text-zinc-300"}`}
+              onClick={() => setPanel(panel === key ? null : key)}
+              className={`rounded-xl p-2 sm:p-2.5 ${panel === key ? "bg-yellow-400 text-black" : "bg-zinc-900 text-zinc-300"}`}
             >
               <Icon size={19} />
             </button>
@@ -327,13 +274,12 @@ export default function MainLayout({
           <Tutorial key={session.role} role={session.role} />
         </nav>
       </header>
-      <div className="flex-1 min-h-0 relative">
+      <div className="relative min-h-0 flex-1">
         <div className="absolute inset-0">
           <MapLayer
             sets={sets}
-            runners={visible.filter((p) => p.category === "RUNNER")}
-            actors={visible.filter((p) => p.category === "ACTOR")}
-            crew={visible.filter((p) => p.category === "TROUPE")}
+            people={visible}
+            now={now}
             onEntityClick={select}
             onMapClick={(lat, lng) => {
               if (producer && !editor && !selected) setPoint({ lat, lng });
@@ -348,159 +294,93 @@ export default function MainLayout({
             theme={mapTheme}
           />
         </div>
-        <div className="absolute top-3 left-3 right-3 z-10 flex items-start justify-between gap-3 pointer-events-none">
-          <div className="bg-zinc-950/95 border border-zinc-700 rounded-xl py-2 px-3 text-xs flex gap-2 items-center shadow-xl pointer-events-auto">
-            {online ? (
-              <Wifi size={15} className="text-emerald-400" />
-            ) : (
-              <WifiOff size={15} className="text-red-400" />
-            )}
-            {online
-              ? "Connesso · aggiornamento ogni 3 s"
-              : "Connessione interrotta"}
+        <div className="pointer-events-none absolute left-3 right-3 top-3 z-10 flex items-start justify-between gap-3">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-950/95 px-3 py-2 text-xs shadow-xl">
+            {connected ? <Wifi size={15} className="text-emerald-400" /> : <WifiOff size={15} className="text-red-400" />}
+            {connected ? t("status_live") : t("status_offline")}
           </div>
           {producer && (
             <button
-              aria-label="Aggiungi set"
+              type="button"
+              aria-label={t("add_set")}
               onClick={() => add("SET")}
-              className="pointer-events-auto bg-yellow-400 text-black rounded-xl p-2.5 font-bold flex gap-1 items-center shadow-xl"
+              className="pointer-events-auto flex items-center gap-1 rounded-xl bg-yellow-400 p-2.5 font-bold text-black shadow-xl"
             >
               <Plus size={18} />
-              <span className="hidden sm:inline">Set</span>
+              <span className="hidden sm:inline">{t("type_set")}</span>
             </button>
           )}
         </div>
-        {(error || localError) && (
+        {errorText && (
           <div
             role="alert"
-            className="absolute top-16 inset-x-3 z-[2100] text-sm text-red-100 bg-red-950 border border-red-800 rounded-xl p-3"
+            className="absolute inset-x-3 top-16 z-[2100] rounded-xl border border-red-800 bg-red-950 p-3 text-sm text-red-100"
           >
-            {localError || error}
-            <button
-              aria-label="Chiudi errore"
-              className="float-right ml-2"
-              onClick={() => setLocalError("")}
-            >
+            {errorText}
+            <button type="button" aria-label={t("close")} className="float-right ml-2" onClick={() => setLocalError("")}>
               <X size={16} />
             </button>
           </div>
         )}
         {notice && !panel && (
           <button
+            type="button"
             onClick={() => {
               setPanel("activity");
               setNotice("");
             }}
             role="status"
-            className="absolute top-16 left-3 right-3 md:left-auto md:w-96 z-20 bg-zinc-900 border border-yellow-400/50 rounded-xl p-4 text-left text-sm shadow-xl"
+            className="absolute left-3 right-3 top-16 z-20 rounded-xl border border-yellow-400/50 bg-zinc-900 p-4 text-left text-sm shadow-xl md:left-auto md:w-96"
           >
-            <Bell size={16} className="inline mr-2 text-yellow-400" />
+            <Bell size={16} className="mr-2 inline text-yellow-400" />
             {notice}
           </button>
         )}
-        {producer &&
-          people.length === 0 &&
-          sets.length === 0 &&
-          !panel &&
-          !editor &&
-          !point && (
-            <div className="absolute inset-x-6 top-24 max-w-sm mx-auto z-10 rounded-2xl bg-zinc-950/95 border border-zinc-700 p-5 shadow-2xl">
-              <p className="font-bold text-lg mb-2">Prepariamo la giornata.</p>
-              <p className="text-sm text-zinc-400 mb-4">
-                Aggiungi i runner alla squadra, crea il set e assegna le persone
-                da recuperare.
-              </p>
-              <button
-                onClick={() => setPanel("people")}
-                className="bg-yellow-400 text-black rounded-xl px-4 py-3 text-sm font-bold"
-              >
-                Aggiungi la squadra
-              </button>
-            </div>
-          )}
-        {candidate && !panel && !editor && (
-          <section
-            role="alertdialog"
-            aria-label="Conferma recupero vicino"
-            className="absolute top-20 inset-x-3 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-[460px] z-[2200] rounded-2xl bg-zinc-900 border border-yellow-400 p-4 shadow-2xl"
-          >
-            <p className="text-xs text-yellow-400 font-bold mb-1">
-              ENTRO 5 METRI · GPS ±{Math.round(active?.accuracy ?? 0)} m
-            </p>
-            <h2 className="font-bold text-lg">
-              Hai recuperato {candidate.name}?
-            </h2>
-            <div className="grid grid-cols-2 gap-2 mt-4">
-              <button
-                disabled={busy}
-                onClick={() =>
-                  setDismissed((s) => new Set(s).add(candidate.id))
-                }
-                className="bg-zinc-700 rounded-xl p-3"
-              >
-                No
-              </button>
-              <button
-                disabled={busy}
-                onClick={() => void pickup(candidate)}
-                className="bg-yellow-400 text-black rounded-xl p-3 font-bold"
-              >
-                {busy ? "Salvataggio…" : "Sì, recuperato"}
-              </button>
-            </div>
-          </section>
+        {producer && people.length === 0 && sets.length === 0 && !panel && !editor && !point && (
+          <div className="absolute inset-x-6 top-24 z-10 mx-auto max-w-sm rounded-2xl border border-zinc-700 bg-zinc-950/95 p-5 shadow-2xl">
+            <p className="mb-2 text-lg font-bold">{t("empty_title")}</p>
+            <p className="mb-4 text-sm text-zinc-400">{t("empty_text")}</p>
+            <button type="button" onClick={() => setPanel("people")} className={primaryButton}>
+              {t("empty_cta")}
+            </button>
+          </div>
+        )}
+        {candidate && gps.fix && !panel && !editor && (
+          <PickupPrompt
+            person={candidate}
+            distance={distanceMeters(gps.fix.location, candidate.location)}
+            accuracy={gps.fix.accuracy}
+            busy={busy}
+            onNo={() => setDismissed((s) => new Set(s).add(candidate.id))}
+            onYes={() => void pickup(candidate)}
+          />
         )}
         {!producer && active && !editor && !selected && (
-          <div className="absolute bottom-7 left-3 right-3 md:max-w-md md:right-auto z-20 rounded-2xl border border-zinc-700 bg-zinc-950/95 shadow-2xl p-4">
-            <div className="flex justify-between gap-3 items-center mb-3">
-              <div>
-                <p className="font-bold">{active.name}</p>
-                <p className="text-xs text-zinc-400 mt-1">
-                  {sharing ? gpsStatus : "Condivisione GPS disattivata"}
-                </p>
-              </div>
-              <button
-                onClick={() => onSharingChange(!sharing)}
-                className={`rounded-xl px-4 py-3 text-sm font-bold ${sharing ? "bg-zinc-700" : "bg-yellow-400 text-black"}`}
-              >
-                {sharing ? "Ferma GPS" : "Condividi GPS"}
-              </button>
-            </div>
-            <p className="text-xs leading-relaxed text-zinc-400">
-              {sharing
-                ? "Tieni RunSet aperta durante il servizio. Il recupero automatico propone una conferma: non viene mai segnato da solo."
-                : "Condividi la tua posizione con il produttore di questa produzione. Puoi fermarla in qualsiasi momento."}
-            </p>
-          </div>
+          <RunnerDock name={active.name} sharing={sharing} status={gps.status} onToggle={toggleSharing} />
         )}
         {!producer && active && (
           <RapidAlertMenu
             runnerName={active.name}
             producerPhone={data.producerInfo.phone}
-            onSend={async (type) => {
-              await mutate({ action: "alert", type });
-            }}
+            onSend={(type) => run(() => actions.sendAlert(productionId, type))}
           />
         )}
         {point && !editor && (
-          <div className="absolute top-20 left-1/2 -translate-x-1/2 w-72 z-30 bg-zinc-950 border border-zinc-700 rounded-2xl shadow-2xl p-4">
-            <div className="flex justify-between items-center mb-3">
-              <p className="text-sm font-bold">Aggiungi in questo punto</p>
-              <button aria-label="Chiudi" onClick={() => setPoint(null)}>
+          <div className="absolute left-1/2 top-20 z-30 w-72 -translate-x-1/2 rounded-2xl border border-zinc-700 bg-zinc-950 p-4 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm font-bold">{t("add_here")}</p>
+              <button type="button" aria-label={t("close")} onClick={() => setPoint(null)}>
                 <X size={18} />
               </button>
             </div>
             {(["SET", "ACTOR", "TROUPE"] as const).map((type) => (
               <button
                 key={type}
+                type="button"
                 onClick={() => add(type, point)}
-                className="block text-left p-3 rounded-xl hover:bg-zinc-800 w-full text-sm"
+                className="block w-full rounded-xl p-3 text-left text-sm hover:bg-zinc-800"
               >
-                {type === "SET"
-                  ? "🎬 Set"
-                  : type === "ACTOR"
-                    ? "🎭 Attore / attrice"
-                    : "👥 Membro troupe"}
+                {type === "SET" ? `🎬 ${t("type_set")}` : type === "ACTOR" ? `🎭 ${t("type_actor")}` : `👥 ${t("type_troupe")}`}
               </button>
             ))}
           </div>
@@ -508,223 +388,37 @@ export default function MainLayout({
         {panel && (
           <>
             <button
-              aria-label="Chiudi pannello"
+              type="button"
+              aria-label={t("close")}
               className="absolute inset-0 z-30 bg-black/30 md:bg-transparent"
               onClick={() => setPanel(null)}
             />
-            <aside className="absolute top-0 bottom-0 left-0 w-full sm:w-[360px] z-40 bg-zinc-950 border-r border-zinc-800 flex flex-col shadow-2xl">
-              <div className="flex items-center justify-between p-5 border-b border-zinc-800">
-                <h2 className="text-lg font-bold">
-                  {panel === "people"
-                    ? "Squadra"
-                    : panel === "sets"
-                      ? "Set di produzione"
-                      : panel === "activity"
-                        ? "Attività"
-                        : "Impostazioni"}
-                </h2>
-                <button
-                  aria-label="Chiudi pannello"
-                  onClick={() => setPanel(null)}
-                  className="p-2 rounded-lg bg-zinc-900"
-                >
+            <aside className="absolute bottom-0 left-0 top-0 z-40 flex w-full flex-col border-r border-zinc-800 bg-zinc-950 shadow-2xl sm:w-[360px]">
+              <div className="flex items-center justify-between border-b border-zinc-800 p-5">
+                <h2 className="text-lg font-bold">{panelTitle[panel]}</h2>
+                <button type="button" aria-label={t("close")} onClick={() => setPanel(null)} className="rounded-lg bg-zinc-900 p-2">
                   <X size={18} />
                 </button>
               </div>
-              <div className="p-5 overflow-y-auto flex-1 space-y-5">
+              <div className="flex-1 space-y-5 overflow-y-auto p-5">
                 {panel === "people" && (
-                  <>
-                    {producer && (
-                      <>
-                        <div className="grid grid-cols-3 gap-2">
-                          {(["RUNNER", "ACTOR", "TROUPE"] as const).map(
-                            (type) => (
-                              <button
-                                key={type}
-                                onClick={() => add(type)}
-                                className="bg-zinc-800 rounded-xl py-3 text-xs flex flex-col items-center gap-1"
-                              >
-                                <Plus size={16} />
-                                {type === "RUNNER"
-                                  ? "Runner"
-                                  : type === "ACTOR"
-                                    ? "Cast"
-                                    : "Troupe"}
-                              </button>
-                            ),
-                          )}
-                        </div>
-                        <label className="block text-xs text-zinc-400">
-                          Filtra per runner
-                          <select
-                            aria-label="Filtra per runner"
-                            value={filter}
-                            onChange={(e) => setFilter(e.target.value)}
-                            className={input + " mt-2"}
-                          >
-                            <option value="">Tutta la squadra</option>
-                            {runners.map((r) => (
-                              <option key={r.id} value={r.id}>
-                                {r.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </>
-                    )}
-                    {(["RUNNER", "ACTOR", "TROUPE"] as const).map(
-                      (category) => {
-                        const members = visible.filter(
-                          (p) => p.category === category,
-                        );
-                        return (
-                          <section key={category}>
-                            <h3 className="text-xs text-zinc-500 tracking-widest uppercase mb-3">
-                              {category === "RUNNER"
-                                ? "Runner"
-                                : category === "ACTOR"
-                                  ? "Cast"
-                                  : "Troupe"}{" "}
-                              · {members.length}
-                            </h3>
-                            {members.length === 0 && (
-                              <p className="text-sm text-zinc-500">
-                                {producer
-                                  ? "Nessun contatto aggiunto."
-                                  : "Nessuna persona assegnata."}
-                              </p>
-                            )}
-                            <div className="space-y-2">
-                              {members.map((p) => (
-                                <div
-                                  key={p.id}
-                                  className="border border-zinc-800 bg-zinc-900/60 rounded-xl p-3"
-                                >
-                                  <button
-                                    onClick={() => select(p)}
-                                    className="w-full text-left flex items-center gap-3"
-                                  >
-                                    <span
-                                      className={`rounded-full w-9 h-9 flex items-center justify-center shrink-0 font-bold text-xs ${p.isRecovered ? "bg-zinc-600 text-zinc-300" : category === "RUNNER" ? "bg-blue-500" : category === "ACTOR" ? "bg-violet-500" : "bg-emerald-600"}`}
-                                    >
-                                      {p.isRecovered ? (
-                                        <Check size={17} />
-                                      ) : (
-                                        p.initials
-                                      )}
-                                    </span>
-                                    <span className="min-w-0 flex-1">
-                                      <span className="block font-semibold text-sm truncate">
-                                        {p.name}
-                                      </span>
-                                      <span className="block text-xs text-zinc-400 mt-1">
-                                        {category === "RUNNER"
-                                          ? p.isLive &&
-                                            p.lastSeen &&
-                                            now - p.lastSeen <= 30000
-                                            ? "● GPS attivo"
-                                            : p.lastSeen
-                                              ? "Ultima posizione salvata"
-                                              : "In attesa del GPS"
-                                          : p.isRecovered
-                                            ? "Recuperato"
-                                            : (people.find(
-                                                (r) =>
-                                                  r.id === p.assignedRunnerId,
-                                              )?.name ?? "Da assegnare")}
-                                      </span>
-                                    </span>
-                                    <ChevronRight
-                                      size={15}
-                                      className="text-zinc-500"
-                                    />
-                                  </button>
-                                  {producer && category === "RUNNER" && (
-                                    <button
-                                      disabled={busy}
-                                      onClick={() => void makeInvite(p)}
-                                      className="mt-3 text-xs text-yellow-400 border-t border-zinc-800 pt-2 w-full text-left"
-                                    >
-                                      Crea / rinnova invito personale
-                                    </button>
-                                  )}
-                                  {!producer &&
-                                    category !== "RUNNER" &&
-                                    !p.isRecovered && (
-                                      <button
-                                        disabled={busy}
-                                        onClick={() => void pickup(p)}
-                                        className="mt-3 rounded-lg bg-yellow-400 text-black text-sm font-bold p-2 w-full"
-                                      >
-                                        Conferma recupero
-                                      </button>
-                                    )}
-                                </div>
-                              ))}
-                            </div>
-                          </section>
-                        );
-                      },
-                    )}
-                  </>
-                )}
-                {panel === "sets" && (
-                  <>
-                    {producer && (
-                      <button
-                        onClick={() => add("SET")}
-                        className="bg-yellow-400 text-black w-full p-3 rounded-xl font-bold flex items-center justify-center gap-2"
-                      >
-                        <Plus size={18} />
-                        Aggiungi set
-                      </button>
-                    )}
-                    {sets.length === 0 && (
-                      <p className="text-sm text-zinc-400">
-                        I set salvati appariranno qui e sulla mappa.
-                      </p>
-                    )}
-                    {sets.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => select(s)}
-                        className="w-full text-left p-4 border border-zinc-800 rounded-xl bg-zinc-900"
-                      >
-                        <p className="font-bold mb-1">🎬 {s.name}</p>
-                        <p className="text-xs text-zinc-400">
-                          {s.address || "Posizione scelta sulla mappa"}
-                        </p>
-                      </button>
-                    ))}
-                  </>
-                )}
-                {panel === "activity" && (
-                  <>
-                    {data.events.length === 0 && (
-                      <p className="text-sm text-zinc-400">
-                        Qui troverai recuperi, nuovi set e segnalazioni dei
-                        runner.
-                      </p>
-                    )}
-                    {[...data.events].reverse().map((event) => (
-                      <article
-                        key={event.id}
-                        className="border-l-2 border-yellow-400 pl-4 py-1"
-                      >
-                        <p className="text-sm mb-2">{event.message}</p>
-                        <time className="text-xs text-zinc-500">
-                          {new Date(event.createdAt).toLocaleString("it-IT")}
-                        </time>
-                      </article>
-                    ))}
-                  </>
-                )}
-                {panel === "settings" && (
-                  <ProductionSettings
-                    data={data}
-                    mutate={mutate}
-                    onLogout={onLogout}
+                  <PeoplePanel
+                    people={people}
+                    producer={producer}
+                    now={now}
+                    filter={filter}
+                    onFilter={setFilter}
+                    busy={busy}
+                    onAdd={(category) => add(category)}
+                    onSelect={select}
+                    onInvite={makeInvite}
+                    onPickup={(person) => void pickup(person)}
                   />
+                )}
+                {panel === "sets" && <SetsPanel sets={sets} producer={producer} onAdd={() => add("SET")} onSelect={select} />}
+                {panel === "activity" && <ActivityPanel events={data.events} />}
+                {panel === "settings" && (
+                  <SettingsPanel data={data} run={run} onLogout={onLogout} onSwitch={onSwitch} />
                 )}
               </div>
             </aside>
@@ -736,8 +430,8 @@ export default function MainLayout({
             initialSet={editor.entity as SetPoint | undefined}
             initialLocation={editor.location}
             onCancel={close}
-            onSave={async (set) => {
-              await mutate({ action: "saveSet", set });
+            onSave={async (set, isNew) => {
+              await run(() => actions.saveSet(productionId, set, isNew));
               close();
             }}
           />
@@ -750,8 +444,8 @@ export default function MainLayout({
             initialLocation={editor.location}
             runners={runners}
             onCancel={close}
-            onSave={async (person) => {
-              await mutate({ action: "savePerson", person });
+            onSave={async (person, isNew) => {
+              await run(() => actions.savePerson(productionId, person, isNew));
               close();
               setPanel("people");
             }}
@@ -760,93 +454,36 @@ export default function MainLayout({
         {selected && !editor && (
           <InfoOverlay
             entity={selected}
-            role={session.role}
+            isProducer={producer}
+            runnerId={session.runnerId}
+            now={now}
             onClose={close}
             onEdit={
               producer
                 ? (entity) => {
-                    setEditor({
-                      type: "category" in entity ? entity.category : "SET",
-                      entity,
-                    });
+                    setEditor({ type: "category" in entity ? entity.category : "SET", entity });
                     setSelectedId(null);
                   }
                 : undefined
             }
             onDelete={
               producer
-                ? async (id) => {
-                    await mutate({
-                      action:
-                        "category" in selected ? "deletePerson" : "deleteSet",
-                      id,
-                    });
+                ? async (entity) => {
+                    await run(() => ("category" in entity ? actions.deletePerson(entity.id) : actions.deleteSet(entity.id)));
                     close();
                   }
                 : undefined
             }
+            onUndo={(person) => run(() => actions.undoPickup(person.id))}
           />
         )}
         {invite && (
-          <div className="fixed inset-0 z-[4000] p-5 bg-black/75 flex items-center justify-center">
-            <section
-              role="dialog"
-              aria-modal="true"
-              aria-label="Invito runner"
-              className="w-full max-w-md bg-zinc-900 border border-zinc-700 rounded-2xl p-5 space-y-4"
-            >
-              <div className="flex justify-between">
-                <h2 className="text-xl font-bold">Invito per {invite.name}</h2>
-                <button
-                  aria-label="Chiudi invito"
-                  onClick={() => setInvite(null)}
-                >
-                  <X size={22} />
-                </button>
-              </div>
-              <p className="text-sm text-zinc-400">
-                Condividi questi codici soltanto con questo runner. L’invito
-                permette l’accesso alla sua squadra. Per revocarlo, creane uno
-                nuovo.
-              </p>
-              <label className="block text-xs text-zinc-400">
-                Produzione
-                <input
-                  readOnly
-                  value={session.roomCode}
-                  className={input + " mt-1 font-mono"}
-                />
-              </label>
-              <label className="block text-xs text-zinc-400">
-                Invito personale
-                <input
-                  readOnly
-                  value={invite.code}
-                  className={input + " mt-1 font-mono"}
-                />
-              </label>
-              <button
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(
-                      `RunSet: ${window.location.origin}\nProduzione: ${session.roomCode}\nInvito personale: ${invite.code}`,
-                    );
-                    setCopied(true);
-                  } catch {
-                    setLocalError("Seleziona e copia i codici manualmente.");
-                  }
-                }}
-                className="bg-yellow-400 text-black p-3 rounded-xl w-full font-bold flex justify-center gap-2"
-              >
-                <Copy size={18} />
-                {copied ? "Copiato" : "Copia invito"}
-              </button>
-              <p className="text-xs text-zinc-500">
-                Questo codice viene mostrato solo adesso. Se lo perdi, rinnova
-                l’invito.
-              </p>
-            </section>
-          </div>
+          <InviteDialog
+            name={invite.name}
+            token={invite.token}
+            productionName={session.productionName}
+            onClose={() => setInvite(null)}
+          />
         )}
       </div>
     </div>

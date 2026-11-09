@@ -1,12 +1,12 @@
 import { createServer } from "node:http";
-import handler from "../api/runset";
+import geocode from "../api/geocode";
 createServer((req, res) => {
-  if (req.url?.split("?")[0] !== "/api/runset") {
+  if (req.url?.split("?")[0] !== "/api/geocode") {
     res.statusCode = 404;
     res.end();
     return;
   }
-  void handler(req, res);
+  void geocode(req, res);
 }).listen(3001, "127.0.0.1", () =>
   console.log("RunSet API http://127.0.0.1:3001"),
 );

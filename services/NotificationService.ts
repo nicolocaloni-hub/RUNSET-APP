@@ -1,4 +1,3 @@
-export type AlertType = "TRAFFICO" | "IMPREVISTO" | "PAUSA BENZINA";
 export class NotificationService {
   static async requestPermission() {
     if (!("Notification" in window)) return false;
@@ -8,17 +7,16 @@ export class NotificationService {
       return false;
     }
   }
-  static showNativeNotification(title: string, body: string, tag?: string) {
-    if (!("Notification" in window) || Notification.permission !== "granted")
-      return;
+  static show(title: string, body: string, tag?: string) {
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
     try {
-      const n = new Notification(title, { body, tag, icon: "/icon.svg" });
-      n.onclick = () => {
+      const notification = new Notification(title, { body, tag, icon: "/icon.svg" });
+      notification.onclick = () => {
         window.focus();
-        n.close();
+        notification.close();
       };
     } catch {
-      /* The event remains available in the activity panel on mobile browsers. */
+      /* Mobile browsers may refuse page notifications; the Activity panel still has the event. */
     }
   }
 }

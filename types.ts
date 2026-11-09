@@ -8,6 +8,8 @@ export interface Location {
   lng: number;
 }
 
+export type Category = "RUNNER" | "ACTOR" | "TROUPE";
+
 export interface SetPoint {
   id: string;
   name: string;
@@ -15,7 +17,7 @@ export interface SetPoint {
   managerName: string;
   phone: string;
   location: Location;
-  note?: string;
+  note: string;
 }
 
 export interface Person {
@@ -24,21 +26,17 @@ export interface Person {
   role: string;
   phone: string;
   initials: string;
-  location: Location;
-  address?: string; // Indirizzo di partenza/locazione
-  category: "RUNNER" | "ACTOR" | "TROUPE";
-  assignedRunnerId?: string; // ID del runner responsabile
-  isLive?: boolean; // Se il runner sta trasmettendo la posizione
-  isRecovered?: boolean; // Se la persona è stata recuperata dal runner
+  category: Category;
+  address: string;
+  /** Meeting point for cast/crew; last GPS fix for runners (absent until the first fix). */
+  location?: Location;
+  assignedRunnerId?: string;
+  // Runner only: GPS state. lastSeen is server time, so device clocks don't matter.
+  sharing?: boolean;
   lastSeen?: number;
   accuracy?: number;
-  locationTimestamp?: number;
+  // Cast/crew only: pickup of the current working day.
+  isRecovered?: boolean;
   recoveredAt?: number;
-}
-
-export interface AppState {
-  role: UserRole | null;
-  activeRunnerId: string | null;
-  sets: SetPoint[];
-  people: Person[];
+  recoveredBy?: string;
 }

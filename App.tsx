@@ -1,324 +1,178 @@
-import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-  useCallback,
-} from "react";
-import { UserRole } from "./types";
-import { Snapshot } from "./services/protocol";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
 import AccessGate from "./components/AccessGate";
-import MainLayout from "./components/MainLayout";
-import { api, ApiError } from "./services/api";
-import { NotificationService } from "./services/NotificationService";
-import { translations, Language, TranslationKey } from "./translations";
-interface Context {
-  language: Language;
-  setLanguage: (l: Language) => void;
-  mapTheme: "light" | "dark";
-  setMapTheme: (v: "light" | "dark") => void;
-  t: (key: TranslationKey, params?: Record<string, string>) => string;
+import ErrorBoundary from "./components/ErrorBoundary";
+import MainLayout, { CenteredMessage } from "./components/MainLayout";
+import PasswordForm from "./components/PasswordForm";
+import ProductionPicker from "./components/ProductionPicker";
+import { primaryButton } from "./components/ui";
+import { client, supabase } from "./lib/supabase";
+import { PreferencesProvider, usePrefs } from "./lib/preferences";
+import { actions, errorCode, memberships as loadMemberships, type Membership } from "./services/store";
+
+const LAST_PRODUCTION_KEY = "runset:last-production";
+
+/** Invite links look like https://…/#invito=<64 hex>; the fragment never reaches a server. */
+function readInviteToken(): string | null {
+  return window.location.hash.match(/invito=([a-f0-9]{64})/)?.[1] ?? null;
 }
-const AppContext = createContext<Context | undefined>(undefined);
-export function useLanguage() {
-  const context = useContext(AppContext);
-  if (!context) throw new Error("Missing App provider");
-  return context;
-}
-function preference(key: string, fallback: string) {
+function lastProduction() {
   try {
-    return localStorage.getItem(key) || fallback;
+    return localStorage.getItem(LAST_PRODUCTION_KEY) ?? undefined;
   } catch {
-    return fallback;
+    return undefined;
   }
 }
-export default function App() {
-  const [language, setLang] = useState<Language>(() =>
-    preference("runset_lang", "it") === "en" ? "en" : "it",
-  );
-  const [mapTheme, setTheme] = useState<"light" | "dark">(() =>
-    preference("runset_map_theme", "dark") === "light" ? "light" : "dark",
-  );
-  const [data, setData] = useState<Snapshot | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [online, setOnline] = useState(false);
-  const [error, setError] = useState("");
-  const [sharing, setSharing] = useState(false);
-  const [gpsStatus, setGpsStatus] = useState("GPS spento");
-  const [now, setNow] = useState(Date.now());
-  const dataRef = useRef<Snapshot | null>(null);
-  const seen = useRef(new Set<string>());
-  const queue = useRef<Promise<unknown>>(Promise.resolve());
-  const epoch = useRef(0);
-  const exiting = useRef(false);
-  const accept = useCallback((next: Snapshot) => {
-    if (
-      dataRef.current &&
-      next.session.roomCode === dataRef.current.session.roomCode &&
-      next.version < dataRef.current.version
-    )
-      return;
-    const initial =
-      !dataRef.current ||
-      dataRef.current.session.roomCode !== next.session.roomCode;
-    if (initial) seen.current.clear();
-    for (const e of next.events) {
-      if (!initial && !seen.current.has(e.id))
-        NotificationService.showNativeNotification(
-          e.type === "PICKUP" ? "Recupero completato" : "RunSet",
-          e.message,
-          e.id,
-        );
-      seen.current.add(e.id);
-    }
-    dataRef.current = next;
-    setData(next);
-    setOnline(true);
-    setError("");
-  }, []);
+
+function Root() {
+  const { t, tError } = usePrefs();
+  const [session, setSession] = useState<Session | null | undefined>(undefined);
+  const [recovery, setRecovery] = useState(false);
+  const [list, setList] = useState<Membership[] | null>(null);
+  const [listError, setListError] = useState("");
+  const [active, setActive] = useState<Membership | null>(null);
+  const [inviteToken, setInviteToken] = useState(readInviteToken);
+  const [joinError, setJoinError] = useState("");
+  const joining = useRef(false);
+
   useEffect(() => {
-    let disposed = false,
-      timer: ReturnType<typeof setTimeout>;
-    async function poll() {
-      const captured = epoch.current;
+    // Remove the token from the address bar and history straight away.
+    if (inviteToken) history.replaceState(null, "", window.location.pathname + window.location.search);
+    const auth = client().auth;
+    void auth.getSession().then(({ data }) => setSession(data.session));
+    const { data } = auth.onAuthStateChange((event, next) => {
+      setSession(next);
+      if (event === "PASSWORD_RECOVERY") setRecovery(true);
+      if (event === "SIGNED_OUT") {
+        setActive(null);
+        setList(null);
+      }
+    });
+    return () => data.subscription.unsubscribe();
+    // Runs once: the invite token is read at startup.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const refresh = useCallback(async (prefer?: string, autoOpen = true) => {
+    setListError("");
+    try {
+      const next = await loadMemberships();
+      setList(next);
+      const wanted = next.find((m) => m.productionId === (prefer ?? lastProduction()));
+      setActive(wanted ?? (autoOpen && next.length === 1 ? next[0] : null));
+    } catch (cause) {
+      setListError(errorCode(cause));
+    }
+  }, []);
+
+  // Runner invite: sign in anonymously on this device, then bind it to the runner.
+  useEffect(() => {
+    if (!inviteToken || session === undefined || joining.current) return;
+    joining.current = true;
+    void (async () => {
       try {
-        const next = await api();
-        if (!disposed && !exiting.current && captured === epoch.current)
-          accept(next);
-      } catch (e) {
-        if (disposed || exiting.current || captured !== epoch.current) return;
-        setOnline(false);
-        if (e instanceof ApiError && e.status === 401) {
-          dataRef.current = null;
-          setData(null);
-          setSharing(false);
-        } else setError((e as Error).message);
+        const auth = client().auth;
+        if (session && !session.user.is_anonymous) {
+          if (!window.confirm(t("join_as_producer_warning"))) return;
+          await auth.signOut();
+        }
+        if (!(await auth.getSession()).data.session) {
+          const { error } = await auth.signInAnonymously();
+          if (error) throw error;
+        }
+        const productionId = await actions.redeemInvite(inviteToken);
+        await refresh(productionId);
+      } catch (cause) {
+        setJoinError(tError(errorCode(cause)));
       } finally {
-        if (!disposed) {
-          setLoading(false);
-          timer = setTimeout(poll, document.hidden ? 15000 : 3000);
-        }
+        setInviteToken(null);
       }
-    }
-    void poll();
-    return () => {
-      disposed = true;
-      clearTimeout(timer);
-    };
-  }, [accept]);
+    })();
+  }, [inviteToken, session, refresh, t, tError]);
+
   useEffect(() => {
-    const tick = setInterval(() => setNow(Date.now()), 3000);
-    return () => clearInterval(tick);
-  }, []);
-  const mutate = useCallback(
-    (body: Record<string, unknown>): Promise<Snapshot> => {
-      const captured = epoch.current;
-      const pending = queue.current
-        .catch(() => {})
-        .then(async () => {
-          if (captured !== epoch.current)
-            throw new ApiError("Sessione cambiata.", 401);
-          const next = await api(body);
-          if (captured === epoch.current && !exiting.current) accept(next);
-          return next;
-        });
-      queue.current = pending;
-      return pending.catch((e) => {
-        if (captured === epoch.current && !exiting.current) {
-          setError((e as Error).message);
-          if (e instanceof ApiError && e.status === 401) {
-            dataRef.current = null;
-            setData(null);
-            setSharing(false);
-          }
-        }
-        throw e;
-      });
-    },
-    [accept],
-  );
-  useEffect(() => {
-    if (!sharing || data?.session.role !== UserRole.RUNNER) return;
-    if (!navigator.geolocation) {
-      setGpsStatus("GPS non supportato");
-      setSharing(false);
-      return;
+    if (inviteToken) return;
+    if (session) void refresh();
+    else {
+      setList(null);
+      setActive(null);
     }
-    let alive = true,
-      sending = false,
-      lastSent = 0;
-    let wake: WakeLockSentinel | undefined;
-    const runnerId = data.session.runnerId;
-    const success = (position: GeolocationPosition) => {
-      if (
-        !alive ||
-        sending ||
-        Date.now() - lastSent < 3000 ||
-        Date.now() - position.timestamp > 30000
-      )
-        return;
-      sending = true;
-      lastSent = Date.now();
-      setGpsStatus(`GPS ±${Math.round(position.coords.accuracy)} m`);
-      void mutate({
-        action: "location",
-        location: {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        },
-        accuracy: position.coords.accuracy,
-        timestamp: position.timestamp,
-        sharing: true,
-      })
-        .catch(() => {
-          if (alive) setGpsStatus("Posizione non inviata · controlla la rete");
-        })
-        .finally(() => {
-          sending = false;
-        });
-    };
-    const failure = (e: GeolocationPositionError) => {
-      if (!alive) return;
-      setGpsStatus(
-        e.code === 1
-          ? "GPS negato: abilitalo nelle impostazioni del browser"
-          : e.code === 2
-            ? "GPS non disponibile"
-            : "In attesa di un segnale GPS",
-      );
-      if (e.code === 1) setSharing(false);
-      void mutate({
-        action: "location",
-        sharing: false,
-        timestamp: Date.now(),
-      }).catch(() => {});
-    };
-    const options = { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 };
-    setGpsStatus("Ricerca segnale GPS…");
-    const watch = navigator.geolocation.watchPosition(
-      success,
-      failure,
-      options,
-    );
-    const fresh = () => {
-      if (!document.hidden)
-        navigator.geolocation.getCurrentPosition(success, failure, options);
-    };
-    const heartbeat = setInterval(fresh, 12000);
-    const lock = async () => {
-      try {
-        if ("wakeLock" in navigator && !document.hidden)
-          wake = await navigator.wakeLock.request("screen");
-      } catch {
-        /* Optional battery/device feature. */
-      }
-    };
-    void lock();
-    const visible = () => {
-      if (!document.hidden) {
-        fresh();
-        void lock();
-      }
-    };
-    document.addEventListener("visibilitychange", visible);
-    return () => {
-      alive = false;
-      navigator.geolocation.clearWatch(watch);
-      clearInterval(heartbeat);
-      document.removeEventListener("visibilitychange", visible);
-      void wake?.release();
-      if (dataRef.current?.session.runnerId === runnerId && !exiting.current)
-        void mutate({
-          action: "location",
-          sharing: false,
-          timestamp: Date.now(),
-        }).catch(() => {});
-    };
-  }, [sharing, data?.session.runnerId, data?.session.role, mutate]);
+    // Reload only when the signed-in user changes, not on token refreshes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user.id, inviteToken]);
+
+  useEffect(() => {
+    if (!active) return;
+    try {
+      localStorage.setItem(LAST_PRODUCTION_KEY, active.productionId);
+    } catch {
+      /* Remembering the last production is optional. */
+    }
+  }, [active]);
+
   const logout = async () => {
-    exiting.current = true;
-    setSharing(false);
-    try {
-      await queue.current.catch(() => {});
-      if (dataRef.current?.session.role === UserRole.RUNNER)
-        await api({
-          action: "location",
-          sharing: false,
-          timestamp: Date.now(),
-        }).catch(() => {});
-      await api({ action: "logout" });
-      epoch.current++;
-      dataRef.current = null;
-      setData(null);
-      setError("");
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      exiting.current = false;
-    }
+    await client().auth.signOut();
+    setActive(null);
+    setList(null);
   };
-  const setLanguage = (value: Language) => {
-    setLang(value);
-    try {
-      localStorage.setItem("runset_lang", value);
-    } catch {}
-  };
-  const setMapTheme = (value: "light" | "dark") => {
-    setTheme(value);
-    try {
-      localStorage.setItem("runset_map_theme", value);
-    } catch {}
-  };
-  const t = (key: TranslationKey, params?: Record<string, string>) => {
-    let value = translations[language][key] || key;
-    for (const [k, v] of Object.entries(params ?? {}))
-      value = value.replace(`{${k}}`, v);
-    return value;
-  };
-  return (
-    <AppContext.Provider
-      value={{ language, setLanguage, mapTheme, setMapTheme, t }}
-    >
-      {loading ? (
-        <div className="m-auto text-yellow-400" role="status">
-          Connessione alla produzione…
+
+  if (session === undefined || inviteToken) return <CenteredMessage text={inviteToken ? t("joining") : t("loading")} />;
+  if (session && recovery)
+    return (
+      <main className="flex h-[100dvh] items-center justify-center bg-zinc-950 p-5">
+        <div className="w-full max-w-md space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
+          <h1 className="text-xl font-semibold">{t("recovery_title")}</h1>
+          <PasswordForm onDone={() => setRecovery(false)} />
         </div>
-      ) : !data ? (
-        <>
-          <AccessGate
-            onAccess={(next) => {
-              epoch.current++;
-              accept(next);
-            }}
-          />
-          {error && (
-            <p
-              role="alert"
-              className="fixed bottom-2 inset-x-3 bg-red-950 p-3 rounded-xl text-sm text-red-200"
-            >
-              {error}
-            </p>
-          )}
-        </>
-      ) : (
-        <MainLayout
-          key={
-            data.session.roomCode +
-            data.session.role +
-            (data.session.runnerId ?? "")
-          }
-          data={data}
-          mutate={mutate}
-          onLogout={logout}
-          sharing={sharing}
-          onSharingChange={setSharing}
-          gpsStatus={gpsStatus}
-          online={online}
-          error={error}
-          now={now}
-        />
-      )}
-    </AppContext.Provider>
+      </main>
+    );
+  if (!session) return <AccessGate initialError={joinError || undefined} />;
+  if (listError)
+    return (
+      <CenteredMessage text={tError(listError)}>
+        <button type="button" onClick={() => void refresh()} className={primaryButton}>
+          {t("retry")}
+        </button>
+      </CenteredMessage>
+    );
+  if (!list) return <CenteredMessage text={t("loading")} />;
+  const producerAccount = !session.user.is_anonymous;
+  if (active)
+    return (
+      <MainLayout
+        key={active.productionId}
+        membership={active}
+        onLogout={logout}
+        onSwitch={
+          producerAccount || list.length > 1
+            ? () => {
+                setActive(null);
+                void refresh(undefined, false);
+              }
+            : undefined
+        }
+      />
+    );
+  return (
+    <ProductionPicker
+      memberships={list}
+      canCreate={producerAccount}
+      onOpen={setActive}
+      onCreated={(id) => void refresh(id)}
+      onSignOut={logout}
+    />
+  );
+}
+
+function ConfigMissing() {
+  const { t } = usePrefs();
+  return <CenteredMessage text={t("err_config_missing")} />;
+}
+
+export default function App() {
+  return (
+    <PreferencesProvider>
+      <ErrorBoundary>{supabase ? <Root /> : <ConfigMissing />}</ErrorBoundary>
+    </PreferencesProvider>
   );
 }

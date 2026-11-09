@@ -1,24 +1,30 @@
 import { Person, SetPoint, UserRole } from "../types";
+
 export interface Session {
   role: UserRole;
   runnerId?: string;
-  roomCode: string;
-  roomName: string;
+  productionId: string;
+  productionName: string;
+  dayNumber: number;
 }
+
+export type EventType = "PICKUP" | "UNDO" | "ALERT" | "SET" | "DAY";
+export type AlertType = "TRAFFIC" | "INCIDENT" | "FUEL";
+
 export interface RunEvent {
   id: string;
-  type: "PICKUP" | "ALERT" | "SET";
-  message: string;
+  type: EventType;
+  /** Names captured when the event happened; rendered in the viewer's language. */
+  data: { person?: string; runner?: string; set?: string; address?: string; alert?: AlertType; day?: number };
   createdAt: number;
   runnerId?: string;
   personId?: string;
 }
+
 export interface Snapshot {
   session: Session;
   people: Person[];
   sets: SetPoint[];
   producerInfo: { name: string; phone: string };
   events: RunEvent[];
-  version: number;
-  accessCode?: string;
 }
