@@ -57,7 +57,8 @@ const personIcon = (initials: string, name: string, color: string, recovered: bo
   cachedIcon(`person|${initials}|${name}|${color}|${recovered}`, () =>
     L.divIcon({
       className: "leaflet-custom-marker",
-      html: `<div class="relative h-[38px] w-[38px]">
+      // Picked-up people fade out so the map stays readable during the day.
+      html: `<div class="relative h-[38px] w-[38px] ${recovered ? "opacity-40" : ""}">
         ${
           recovered
             ? `<div class="flex h-[38px] w-[38px] items-center justify-center rounded-full border-2 border-[#9AA4B2] bg-white text-[#5B6675] shadow-md">
@@ -344,6 +345,7 @@ export default function MapLayer({
               key={person.id}
               title={`${person.name}${person.isRecovered ? ` · ${t("recovered")}` : ""}`}
               position={[person.location!.lat, person.location!.lng]}
+              zIndexOffset={person.isRecovered ? -500 : 0}
               icon={personIcon(person.initials, firstName(person.name), CATEGORY_COLOR[person.category], !!person.isRecovered)}
             >
               <Popup closeButton={false}>
