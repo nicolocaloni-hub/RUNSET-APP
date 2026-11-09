@@ -17,5 +17,7 @@ export function eventText(event: RunEvent, t: T): string {
       return t("ev_SET", { set, address }).trim();
     case "DAY":
       return t("ev_DAY", { day });
+    case "ARRIVING":
+      return t("ev_ARRIVING", { runner, person, meters: event.data.meters ?? "" });
   }
 }

@@ -6,7 +6,7 @@ import type { Category, Person } from "../types";
 import { field, fieldLabel } from "./ui";
 
 const CATEGORIES: Category[] = ["RUNNER", "ACTOR", "TROUPE"];
-const BADGE: Record<Category, string> = { RUNNER: "bg-blue-500", ACTOR: "bg-violet-500", TROUPE: "bg-emerald-600" };
+const BADGE: Record<Category, string> = { RUNNER: "bg-ink", ACTOR: "bg-cast", TROUPE: "bg-crew" };
 
 export default function PeoplePanel({
   people,
@@ -15,6 +15,7 @@ export default function PeoplePanel({
   filter,
   onFilter,
   busy,
+  colors,
   onAdd,
   onSelect,
   onInvite,
@@ -27,6 +28,8 @@ export default function PeoplePanel({
   filter: string;
   onFilter: (runnerId: string) => void;
   busy: boolean;
+  /** Runner id to palette color, shared with the map. */
+  colors: Map<string, string>;
   onAdd: (category: Category) => void;
   onSelect: (person: Person) => void;
   onInvite: (runner: Person) => void;
@@ -55,7 +58,7 @@ export default function PeoplePanel({
                 key={category}
                 type="button"
                 onClick={() => onAdd(category)}
-                className="flex flex-col items-center gap-1 rounded-xl bg-zinc-800 py-3 text-xs"
+                className="flex flex-col items-center gap-1 rounded-2xl bg-ground py-3 text-xs font-semibold"
               >
                 <Plus size={16} />
                 {t(`cat_${category}`)}
@@ -77,9 +80,9 @@ export default function PeoplePanel({
       )}
       {toPickUp.length > 0 && (
         <div>
-          <p className="mb-1.5 text-xs text-zinc-400">{t("progress", { done, total: toPickUp.length })}</p>
-          <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800">
-            <div className="h-full bg-yellow-400 transition-all" style={{ width: `${(done / toPickUp.length) * 100}%` }} />
+          <p className="mb-1.5 text-xs text-muted">{t("progress", { done, total: toPickUp.length })}</p>
+          <div className="h-1.5 overflow-hidden rounded-full bg-ground">
+            <div className="h-full bg-signal transition-all" style={{ width: `${(done / toPickUp.length) * 100}%` }} />
           </div>
         </div>
       )}
@@ -87,35 +90,36 @@ export default function PeoplePanel({
         const members = visible.filter((p) => p.category === category);
         return (
           <section key={category}>
-            <h3 className="mb-3 text-xs uppercase tracking-widest text-zinc-500">
+            <h3 className="mb-3 font-mono text-[11px] font-semibold uppercase tracking-wider text-muted">
               {t(`cat_${category}`)} · {members.length}
             </h3>
             {members.length === 0 && (
-              <p className="text-sm text-zinc-500">{producer ? t("no_contacts") : t("no_assigned")}</p>
+              <p className="text-sm text-muted">{producer ? t("no_contacts") : t("no_assigned")}</p>
             )}
             <div className="space-y-2">
               {members.map((p) => (
-                <div key={p.id} className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
+                <div key={p.id} className="rounded-2xl border-[1.5px] border-line bg-white p-3">
                   <button type="button" onClick={() => onSelect(p)} className="flex w-full items-center gap-3 text-left">
                     <span
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                        p.isRecovered ? "bg-zinc-600 text-zinc-300" : BADGE[category]
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-display text-xs font-bold ${
+                        p.isRecovered ? "border-2 border-[#9AA4B2] text-muted" : `text-white ${BADGE[category]}`
                       }`}
+                      style={!p.isRecovered && category === "RUNNER" ? { background: colors.get(p.id) } : undefined}
                     >
                       {p.isRecovered ? <Check size={17} /> : p.initials}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold">{p.name}</span>
-                      <span className="mt-1 block text-xs text-zinc-400">{status(p)}</span>
+                      <span className="mt-1 block text-xs text-muted">{status(p)}</span>
                     </span>
-                    <ChevronRight size={15} className="text-zinc-500" />
+                    <ChevronRight size={15} className="text-muted" />
                   </button>
                   {producer && category === "RUNNER" && (
                     <button
                       type="button"
                       disabled={busy}
                       onClick={() => onInvite(p)}
-                      className="mt-3 w-full border-t border-zinc-800 pt-2 text-left text-xs text-yellow-400"
+                      className="mt-3 w-full border-t border-line pt-2 text-left text-xs text-signal-text"
                     >
                       {t("invite_button")}
                     </button>
@@ -125,7 +129,7 @@ export default function PeoplePanel({
                       type="button"
                       disabled={busy}
                       onClick={() => onPickup(p)}
-                      className="mt-3 w-full rounded-lg bg-yellow-400 p-2 text-sm font-bold text-black"
+                      className="mt-3 w-full rounded-lg bg-signal p-2 text-sm font-bold text-ink"
                     >
                       {t("confirm_pickup")}
                     </button>

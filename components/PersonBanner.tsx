@@ -81,7 +81,7 @@ export default function PersonBanner({
       closeDisabled={busy}
       badge={
         initialLocation && (
-          <span className="flex items-center gap-1 rounded-full border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold text-blue-400">
+          <span className="flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">
             <Crosshair size={10} />
             {t("map_pin")}
           </span>
@@ -130,7 +130,7 @@ export default function PersonBanner({
           pinned={Boolean(initialLocation)}
           required={!runner}
         />
-        {runner && <p className="text-xs text-zinc-400">{t("runner_location_note")}</p>}
+        {runner && <p className="text-xs text-muted">{t("runner_location_note")}</p>}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <label className={fieldLabel}>
             {t("phone")}
@@ -163,7 +163,7 @@ export default function PersonBanner({
           )}
         </div>
         {error && (
-          <p role="alert" className="text-sm text-red-400">
+          <p role="alert" className="text-sm text-red-700">
             {error}
           </p>
         )}

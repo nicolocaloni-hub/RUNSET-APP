@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Bell, Clapperboard, Plus, Settings, Users, Wifi, WifiOff, X } from "lucide-react";
+import { Bell, Clapperboard, Map as MapIcon, MoreHorizontal, Plus, Users, X } from "lucide-react";
 import { useProduction } from "../hooks/useProduction";
 import { useRunnerGps } from "../hooks/useRunnerGps";
 import { eventText } from "../lib/events";
 import { usePrefs } from "../lib/preferences";
+import { runnerColors } from "../lib/runners";
 import { NotificationService } from "../services/NotificationService";
 import type { Snapshot } from "../services/protocol";
 import {
@@ -20,6 +21,7 @@ import MapLayer from "./MapLayer";
 import PeoplePanel from "./PeoplePanel";
 import PersonBanner from "./PersonBanner";
 import PickupPrompt from "./PickupPrompt";
+import ProducerSummary from "./ProducerSummary";
 import RapidAlertMenu from "./RapidAlertMenu";
 import RunnerDock from "./RunnerDock";
 import SetBanner from "./SetBanner";
@@ -34,8 +36,8 @@ const GPS_CONSENT_KEY = "runset:gps-consent:v1";
 
 export function CenteredMessage({ text, children }: { text: string; children?: React.ReactNode }) {
   return (
-    <main className="flex h-[100dvh] flex-col items-center justify-center gap-5 bg-zinc-950 p-6 text-center">
-      <p className="max-w-sm text-zinc-200" role="status">
+    <main className="flex h-[100dvh] flex-col items-center justify-center gap-5 bg-ground p-6 text-center">
+      <p className="max-w-sm text-ink2" role="status">
         {text}
       </p>
       {children}
@@ -103,12 +105,13 @@ function Workspace({
   onLogout: () => Promise<void>;
   onSwitch?: () => void;
 }) {
-  const { t, tError, mapTheme } = usePrefs();
+  const { t, tError } = usePrefs();
   const { people, sets, session } = data;
   const producer = session.role === UserRole.PRODUCER;
   const productionId = session.productionId;
   const [now, setNow] = useState(serverNow);
-  const [panel, setPanel] = useState<Panel>(() => (window.matchMedia("(min-width:768px)").matches ? "people" : null));
+  const [panel, setPanel] = useState<Panel>(null);
+  const [adding, setAdding] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [point, setPoint] = useState<Location | null>(null);
@@ -128,6 +131,8 @@ function Workspace({
 
   const active = people.find((p) => p.id === session.runnerId);
   const runners = people.filter((p) => p.category === "RUNNER");
+  const colors = useMemo(() => runnerColors(people), [people]);
+  const assigned = people.filter((p) => p.category !== "RUNNER" && p.assignedRunnerId === session.runnerId);
   const selected = people.find((p) => p.id === selectedId) ?? sets.find((s) => s.id === selectedId);
   const visible = useMemo(
     () => (filter ? people.filter((p) => p.id === filter || p.assignedRunnerId === filter) : people),
@@ -156,12 +161,16 @@ function Workspace({
       return;
     }
     const fresh = data.events.filter((e) => !seen.current!.has(e.id));
-    for (const event of fresh) {
-      seen.current.add(event.id);
-      NotificationService.show(event.type === "PICKUP" ? t("notify_pickup_title") : "RunSet", eventText(event, t), event.id);
+    for (const event of fresh) seen.current.add(event.id);
+    // "Arriving" alerts are for the producer; the runner already knows where they are.
+    const shown = fresh.filter((e) => producer || e.type !== "ARRIVING");
+    for (const event of shown) {
+      const title =
+        event.type === "PICKUP" ? t("notify_pickup_title") : event.type === "ARRIVING" ? t("notify_arriving_title") : "RunSet";
+      NotificationService.show(title, eventText(event, t), event.id);
     }
-    if (fresh.length) setNotice(eventText(fresh[fresh.length - 1], t));
-  }, [data.events, t]);
+    if (shown.length) setNotice(eventText(shown[shown.length - 1], t));
+  }, [data.events, t, producer]);
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 8000);
@@ -172,10 +181,12 @@ function Workspace({
     setSelectedId(null);
     setEditor(null);
     setPoint(null);
+    setAdding(false);
   };
   const add = (type: Editor["type"], location?: Location) => {
     setEditor({ type, location });
     setPoint(null);
+    setAdding(false);
     setSelectedId(null);
     setPanel(null);
   };
@@ -229,11 +240,12 @@ function Workspace({
     selected && (!("category" in selected) || selected.category !== "RUNNER" || selected.lastSeen)
       ? selected.location
       : undefined;
-  const nav = [
+  const tabs = [
+    { key: null, Icon: MapIcon, label: t("nav_map") },
     { key: "people", Icon: Users, label: t("nav_people") },
     { key: "sets", Icon: Clapperboard, label: t("nav_sets") },
     { key: "activity", Icon: Bell, label: t("nav_activity") },
-    { key: "settings", Icon: Settings, label: t("nav_settings") },
+    { key: "settings", Icon: MoreHorizontal, label: t("nav_more") },
   ] as const;
   const panelTitle = {
     people: t("nav_people"),
@@ -242,38 +254,11 @@ function Workspace({
     settings: t("nav_settings"),
   };
   const errorText = localError || (loadError ? tError(loadError) : "");
+  const onMap = !panel && !editor && !selected && !point && !adding;
+  const day = t("day_label", { day: session.dayNumber });
 
   return (
-    <div className="flex h-[100dvh] flex-col bg-zinc-950 text-white">
-      <header className="z-30 flex h-16 shrink-0 items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-950 px-2 sm:gap-3 sm:px-3 md:px-5">
-        <div className="flex min-w-0 items-center gap-3">
-          <Clapperboard className="hidden shrink-0 text-yellow-400 sm:block" size={24} />
-          <div className="min-w-0">
-            <h1 className="truncate text-xl font-black leading-5 tracking-tight">
-              RunSet<span className="text-yellow-400">.</span>
-            </h1>
-            <p className="max-w-[130px] truncate text-[11px] text-zinc-400 sm:max-w-xs">
-              {session.productionName} · {t("day_label", { day: session.dayNumber })}
-            </p>
-          </div>
-        </div>
-        <nav className="flex shrink-0 items-center gap-1 sm:gap-1.5" aria-label={t("menu_label")}>
-          {nav.map(({ key, Icon, label }) => (
-            <button
-              key={key}
-              type="button"
-              aria-label={label}
-              aria-pressed={panel === key}
-              title={label}
-              onClick={() => setPanel(panel === key ? null : key)}
-              className={`rounded-xl p-2 sm:p-2.5 ${panel === key ? "bg-yellow-400 text-black" : "bg-zinc-900 text-zinc-300"}`}
-            >
-              <Icon size={19} />
-            </button>
-          ))}
-          <Tutorial key={session.role} role={session.role} />
-        </nav>
-      </header>
+    <div className="flex h-[100dvh] flex-col bg-ground text-ink">
       <div className="relative min-h-0 flex-1">
         <div className="absolute inset-0">
           <MapLayer
@@ -291,38 +276,72 @@ function Workspace({
               }
             }}
             forceCenter={focus}
-            theme={mapTheme}
+            controlsClassName="top-[84px]"
           />
         </div>
-        <div className="pointer-events-none absolute left-3 right-3 top-3 z-10 flex items-start justify-between gap-3">
-          <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-950/95 px-3 py-2 text-xs shadow-xl">
-            {connected ? <Wifi size={15} className="text-emerald-400" /> : <WifiOff size={15} className="text-red-400" />}
-            {connected ? t("status_live") : t("status_offline")}
+
+        <div className="pt-safe pointer-events-none absolute inset-x-3 top-3 z-30 flex items-center gap-2.5 sm:inset-x-4 sm:top-4">
+          <div className="pointer-events-auto flex min-w-0 flex-1 items-center gap-2.5 rounded-[18px] bg-white px-3.5 py-2.5 shadow-float">
+            <svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" className="shrink-0">
+              <path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7Z" fill="#FF5B1F" />
+              <circle cx="12" cy="9" r="2.6" fill="#ffffff" />
+            </svg>
+            <div className="min-w-0">
+              <h1 className="truncate font-display text-[15px] font-bold leading-5">
+                {producer ? session.productionName : `${active?.name ?? ""} · ${t("role_runner")}`}
+              </h1>
+              <p className="flex items-center gap-1.5 truncate font-mono text-[11px] text-muted" role="status">
+                <span
+                  aria-hidden="true"
+                  className={`h-2 w-2 shrink-0 rounded-full ${connected ? "bg-live" : "bg-red-500"}`}
+                />
+                <span className="truncate">
+                  {!connected
+                    ? t("status_offline")
+                    : producer
+                      ? t("live_sub", { day })
+                      : `${session.productionName} · ${day}`}
+                </span>
+              </p>
+            </div>
           </div>
+          {!producer && active && (
+            <RapidAlertMenu
+              runnerName={active.name}
+              producerPhone={data.producerInfo.phone}
+              onSend={(type) => run(() => actions.sendAlert(productionId, type))}
+            />
+          )}
+          <Tutorial key={session.role} role={session.role} />
           {producer && (
             <button
               type="button"
-              aria-label={t("add_set")}
-              onClick={() => add("SET")}
-              className="pointer-events-auto flex items-center gap-1 rounded-xl bg-yellow-400 p-2.5 font-bold text-black shadow-xl"
+              aria-label={t("add_menu")}
+              title={t("add_menu")}
+              onClick={() => {
+                close();
+                setPanel(null);
+                setAdding(true);
+              }}
+              className="pointer-events-auto flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-ink text-white shadow-float"
             >
-              <Plus size={18} />
-              <span className="hidden sm:inline">{t("type_set")}</span>
+              <Plus size={24} />
             </button>
           )}
         </div>
+
         {errorText && (
           <div
             role="alert"
-            className="absolute inset-x-3 top-16 z-[2100] rounded-xl border border-red-800 bg-red-950 p-3 text-sm text-red-100"
+            className="absolute inset-x-3 top-[84px] z-[2100] flex items-start gap-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 shadow-float sm:inset-x-4 md:left-auto md:w-96"
           >
-            {errorText}
-            <button type="button" aria-label={t("close")} className="float-right ml-2" onClick={() => setLocalError("")}>
+            <span className="flex-1">{errorText}</span>
+            <button type="button" aria-label={t("close")} onClick={() => setLocalError("")}>
               <X size={16} />
             </button>
           </div>
         )}
-        {notice && !panel && (
+        {notice && !panel && !errorText && (
           <button
             type="button"
             onClick={() => {
@@ -330,16 +349,18 @@ function Workspace({
               setNotice("");
             }}
             role="status"
-            className="absolute left-3 right-3 top-16 z-20 rounded-xl border border-yellow-400/50 bg-zinc-900 p-4 text-left text-sm shadow-xl md:left-auto md:w-96"
+            className="absolute inset-x-3 top-[84px] z-20 flex items-center gap-3 rounded-2xl bg-ink p-3.5 text-left text-sm font-medium text-white shadow-float sm:inset-x-4 md:left-auto md:right-20 md:w-96"
           >
-            <Bell size={16} className="mr-2 inline text-yellow-400" />
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-signal text-ink">
+              <Bell size={16} />
+            </span>
             {notice}
           </button>
         )}
-        {producer && people.length === 0 && sets.length === 0 && !panel && !editor && !point && (
-          <div className="absolute inset-x-6 top-24 z-10 mx-auto max-w-sm rounded-2xl border border-zinc-700 bg-zinc-950/95 p-5 shadow-2xl">
-            <p className="mb-2 text-lg font-bold">{t("empty_title")}</p>
-            <p className="mb-4 text-sm text-zinc-400">{t("empty_text")}</p>
+        {producer && people.length === 0 && sets.length === 0 && onMap && (
+          <div className="absolute inset-x-4 top-[92px] z-10 mx-auto max-w-sm rounded-[22px] bg-white p-5 shadow-float">
+            <p className="mb-2 font-display text-lg font-bold">{t("empty_title")}</p>
+            <p className="mb-4 text-sm text-muted">{t("empty_text")}</p>
             <button type="button" onClick={() => setPanel("people")} className={primaryButton}>
               {t("empty_cta")}
             </button>
@@ -355,32 +376,44 @@ function Workspace({
             onYes={() => void pickup(candidate)}
           />
         )}
-        {!producer && active && !editor && !selected && (
-          <RunnerDock name={active.name} sharing={sharing} status={gps.status} onToggle={toggleSharing} />
+        {producer && onMap && people.length > 0 && (
+          <ProducerSummary people={people} now={now} colors={colors} onSelect={select} />
         )}
-        {!producer && active && (
-          <RapidAlertMenu
-            runnerName={active.name}
-            producerPhone={data.producerInfo.phone}
-            onSend={(type) => run(() => actions.sendAlert(productionId, type))}
-          />
+        {!producer && active && onMap && (
+          <RunnerDock sharing={sharing} status={gps.status} onToggle={toggleSharing} assigned={assigned} onSelect={select} />
         )}
-        {point && !editor && (
-          <div className="absolute left-1/2 top-20 z-30 w-72 -translate-x-1/2 rounded-2xl border border-zinc-700 bg-zinc-950 p-4 shadow-2xl">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-bold">{t("add_here")}</p>
-              <button type="button" aria-label={t("close")} onClick={() => setPoint(null)}>
+        {(point || adding) && !editor && (
+          <div className="absolute left-1/2 top-[84px] z-30 w-72 -translate-x-1/2 rounded-[22px] bg-white p-3 shadow-[0_14px_36px_rgba(13,27,42,0.28)]">
+            <div className="mb-1 flex items-center justify-between px-2 pt-1">
+              <p className="font-display text-sm font-bold">{point ? t("add_here") : t("add_menu")}</p>
+              <button
+                type="button"
+                aria-label={t("close")}
+                onClick={() => {
+                  setPoint(null);
+                  setAdding(false);
+                }}
+                className="rounded-lg p-1.5 hover:bg-ground"
+              >
                 <X size={18} />
               </button>
             </div>
-            {(["SET", "ACTOR", "TROUPE"] as const).map((type) => (
+            {(["SET", "ACTOR", "TROUPE", ...(point ? [] : (["RUNNER"] as const))] as const).map((type) => (
               <button
                 key={type}
                 type="button"
-                onClick={() => add(type, point)}
-                className="block w-full rounded-xl p-3 text-left text-sm hover:bg-zinc-800"
+                onClick={() => add(type, point ?? undefined)}
+                className="flex w-full items-center gap-3 rounded-xl p-2.5 text-left text-sm font-medium hover:bg-ground"
               >
-                {type === "SET" ? `🎬 ${t("type_set")}` : type === "ACTOR" ? `🎭 ${t("type_actor")}` : `👥 ${t("type_troupe")}`}
+                <span
+                  aria-hidden="true"
+                  className={`flex h-8 w-8 items-center justify-center rounded-full text-white ${
+                    type === "SET" ? "rounded-lg bg-ink" : type === "ACTOR" ? "bg-cast" : type === "TROUPE" ? "bg-crew" : "bg-signal"
+                  }`}
+                >
+                  {type === "SET" ? <Clapperboard size={16} /> : <Plus size={16} />}
+                </span>
+                {type === "SET" ? t("type_set") : t(`cat_${type}`)}
               </button>
             ))}
           </div>
@@ -390,17 +423,23 @@ function Workspace({
             <button
               type="button"
               aria-label={t("close")}
-              className="absolute inset-0 z-30 bg-black/30 md:bg-transparent"
+              className="absolute inset-0 z-30 bg-ink/30 md:bg-transparent"
               onClick={() => setPanel(null)}
             />
-            <aside className="absolute bottom-0 left-0 top-0 z-40 flex w-full flex-col border-r border-zinc-800 bg-zinc-950 shadow-2xl sm:w-[360px]">
-              <div className="flex items-center justify-between border-b border-zinc-800 p-5">
-                <h2 className="text-lg font-bold">{panelTitle[panel]}</h2>
-                <button type="button" aria-label={t("close")} onClick={() => setPanel(null)} className="rounded-lg bg-zinc-900 p-2">
+            <aside className="absolute inset-x-0 bottom-0 top-16 z-40 flex flex-col rounded-t-[26px] bg-white shadow-sheet md:inset-y-3 md:left-3 md:right-auto md:w-[400px] md:rounded-[26px]">
+              <span aria-hidden="true" className="mx-auto mt-2.5 h-[5px] w-10 shrink-0 rounded-full bg-line2 md:hidden" />
+              <div className="flex items-center justify-between px-5 pb-2 pt-3">
+                <h2 className="font-display text-2xl font-bold">{panelTitle[panel]}</h2>
+                <button
+                  type="button"
+                  aria-label={t("close")}
+                  onClick={() => setPanel(null)}
+                  className="flex h-10 w-10 items-center justify-center rounded-xl bg-ground"
+                >
                   <X size={18} />
                 </button>
               </div>
-              <div className="flex-1 space-y-5 overflow-y-auto p-5">
+              <div className="flex-1 space-y-5 overflow-y-auto px-5 pb-5 pt-2">
                 {panel === "people" && (
                   <PeoplePanel
                     people={people}
@@ -409,6 +448,7 @@ function Workspace({
                     filter={filter}
                     onFilter={setFilter}
                     busy={busy}
+                    colors={colors}
                     onAdd={(category) => add(category)}
                     onSelect={select}
                     onInvite={makeInvite}
@@ -486,6 +526,25 @@ function Workspace({
           />
         )}
       </div>
+      <nav aria-label={t("menu_label")} className="pb-safe z-30 flex shrink-0 border-t border-line bg-white">
+        {tabs.map(({ key, Icon, label }) => {
+          const current = panel === key;
+          return (
+            <button
+              key={label}
+              type="button"
+              aria-current={current ? "page" : undefined}
+              onClick={() => setPanel(key)}
+              className={`flex min-h-[60px] flex-1 flex-col items-center justify-center gap-1 text-[11px] font-semibold ${
+                current ? "text-ink" : "text-muted"
+              }`}
+            >
+              <Icon size={22} className={current ? "text-signal-dark" : ""} aria-hidden="true" />
+              {label}
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }

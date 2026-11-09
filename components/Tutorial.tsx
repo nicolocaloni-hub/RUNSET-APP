@@ -33,7 +33,7 @@ const STEPS: Record<Language, Record<UserRole, Step[]>> = {
         title: "La produzione, a colpo d’occhio",
         where: "Mappa e barra in alto",
         Icon: Clapperboard,
-        text: "Questa è la mappa della tua produzione. Dalla barra in alto apri Squadra, Set, Attività e Impostazioni. Gli aggiornamenti arrivano in tempo reale.",
+        text: "Questa è la mappa della tua produzione. Dalla barra in basso apri Mappa, Squadra, Set, Attività e Altro. Gli aggiornamenti arrivano in tempo reale.",
         tip: "Puoi saltare la guida e riaprirla quando vuoi con Tutorial.",
       },
       {
@@ -61,7 +61,7 @@ const STEPS: Record<Language, Record<UserRole, Step[]>> = {
         title: "Segui gli spostamenti",
         where: "Mappa · Bollini dei runner",
         Icon: Navigation,
-        text: "Quando un runner condivide il GPS, il suo bollino blu si muove sulla mappa. Se non arrivano aggiornamenti per 30 secondi diventa grigio con l’ora dell’ultima posizione.",
+        text: "Quando un runner condivide il GPS, la sua macchina con le iniziali scorre sulla mappa lasciando una scia del suo colore. Quando arriva a 250 m da una persona da recuperare ricevi un avviso. Senza aggiornamenti per 30 secondi la macchina si sbiadisce e mostra l’ora dell’ultima posizione.",
         tip: "Un bollino grigio non significa che il runner sia ancora lì.",
       },
       {
@@ -77,7 +77,7 @@ const STEPS: Record<Language, Record<UserRole, Step[]>> = {
         title: "La tua giornata sul set",
         where: "Mappa e barra in alto",
         Icon: Users,
-        text: "Qui trovi le persone che il produttore ti ha assegnato e i set da raggiungere. Dalla barra in alto apri Squadra, Set, Attività e Impostazioni.",
+        text: "Qui trovi le persone che il produttore ti ha assegnato e i set da raggiungere. Dalla barra in basso apri Mappa, Squadra, Set, Attività e Altro.",
         tip: "La guida è sempre disponibile dal tasto Tutorial.",
       },
       {
@@ -103,9 +103,9 @@ const STEPS: Record<Language, Record<UserRole, Step[]>> = {
       },
       {
         title: "Avvisa la produzione",
-        where: "Tasto giallo delle segnalazioni",
+        where: "Triangolo in alto a destra",
         Icon: Bell,
-        text: "Usa il triangolo giallo per segnalare traffico, un imprevisto o una pausa benzina. Da lì puoi anche chiamare il produttore o scrivergli su WhatsApp.",
+        text: "Usa il triangolo in alto a destra per segnalare traffico, un imprevisto o una pausa benzina. Da lì puoi anche chiamare il produttore o scrivergli su WhatsApp.",
         tip: "Apri Attività per consultare gli eventi della tua squadra.",
       },
       {
@@ -123,7 +123,7 @@ const STEPS: Record<Language, Record<UserRole, Step[]>> = {
         title: "Your production at a glance",
         where: "Map and top bar",
         Icon: Clapperboard,
-        text: "This is your production’s map. From the top bar open Team, Sets, Activity and Settings. Updates arrive in real time.",
+        text: "This is your production’s map. From the bottom bar open Map, Team, Sets, Activity and More. Updates arrive in real time.",
         tip: "You can skip the guide and reopen it any time with Tutorial.",
       },
       {
@@ -151,7 +151,7 @@ const STEPS: Record<Language, Record<UserRole, Step[]>> = {
         title: "Follow the runners",
         where: "Map · Runner badges",
         Icon: Navigation,
-        text: "When a runner shares GPS, their blue badge moves on the map. Without updates for 30 seconds it turns grey and shows the time of the last position.",
+        text: "When a runner shares GPS, their car with initials glides across the map, leaving a trail in their color. When they get within 250 m of someone to pick up, you get an alert. Without updates for 30 seconds the car fades and shows the time of the last position.",
         tip: "A grey badge doesn’t mean the runner is still there.",
       },
       {
@@ -167,7 +167,7 @@ const STEPS: Record<Language, Record<UserRole, Step[]>> = {
         title: "Your day on set",
         where: "Map and top bar",
         Icon: Users,
-        text: "Here you find the people the producer assigned to you and the sets to reach. From the top bar open Team, Sets, Activity and Settings.",
+        text: "Here you find the people the producer assigned to you and the sets to reach. From the bottom bar open Map, Team, Sets, Activity and More.",
         tip: "The guide is always available from the Tutorial button.",
       },
       {
@@ -193,9 +193,9 @@ const STEPS: Record<Language, Record<UserRole, Step[]>> = {
       },
       {
         title: "Alert the production",
-        where: "Yellow alert button",
+        where: "Triangle at the top right",
         Icon: Bell,
-        text: "Use the yellow triangle to report traffic, an incident or a fuel stop. From there you can also call the producer or message them on WhatsApp.",
+        text: "Use the triangle at the top right to report traffic, an incident or a fuel stop. From there you can also call the producer or message them on WhatsApp.",
         tip: "Open Activity to see your team’s events.",
       },
       {
@@ -263,10 +263,10 @@ export default function Tutorial({ role }: { role: UserRole }) {
         }}
         aria-haspopup="dialog"
         title={t("tutorial")}
-        className="flex items-center gap-1.5 rounded-xl border border-yellow-400/30 bg-yellow-400/10 px-2 py-2 text-xs font-semibold text-yellow-300 sm:px-3 sm:text-sm"
+        aria-label={t("tutorial")}
+        className="pointer-events-auto flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[18px] bg-white text-ink shadow-float"
       >
-        <BookOpen size={17} className="hidden sm:block" aria-hidden="true" />
-        {t("tutorial")}
+        <BookOpen size={20} aria-hidden="true" />
       </button>
       {open &&
         createPortal(
@@ -278,41 +278,41 @@ export default function Tutorial({ role }: { role: UserRole }) {
               event.preventDefault();
               dismiss();
             }}
-            className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-3xl border border-zinc-700 bg-zinc-950 p-0 text-white shadow-2xl backdrop:bg-black/70"
+            className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-3xl border border-line2 bg-white p-0 text-ink shadow-2xl backdrop:bg-ink/50"
           >
             <div className="p-5 sm:p-7">
               <div className="mb-6 flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-yellow-300">
+                <p className="text-xs font-semibold uppercase tracking-wide text-signal-text">
                   {t("tutorial")} · {role === UserRole.PRODUCER ? t("role_producer") : t("role_runner")}
                 </p>
                 <button
                   type="button"
                   onClick={dismiss}
-                  className="rounded-lg px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                  className="rounded-lg px-3 py-2 text-sm text-ink2 hover:bg-ground hover:text-ink"
                 >
                   {t("skip")}
                 </button>
               </div>
-              <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-yellow-400 text-black">
+              <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-signal text-ink">
                 <Icon size={28} aria-hidden="true" />
               </div>
-              <p className="mb-2 text-xs text-zinc-400">
+              <p className="mb-2 text-xs text-muted">
                 {index + 1} / {steps.length} · {step.where}
               </p>
               <h2 ref={heading} id={titleId} tabIndex={-1} className="mb-3 text-2xl font-bold tracking-tight outline-none">
                 {step.title}
               </h2>
-              <p id={descriptionId} className="text-sm leading-relaxed text-zinc-300">
+              <p id={descriptionId} className="text-sm leading-relaxed text-ink2">
                 {step.text}
               </p>
-              <p className="mt-5 rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-xs leading-relaxed text-zinc-400">
+              <p className="mt-5 rounded-xl border border-line bg-ground p-3 text-xs leading-relaxed text-muted">
                 {step.tip}
               </p>
               <div className="my-6 flex gap-1.5" aria-hidden="true">
                 {steps.map((item, number) => (
                   <span
                     key={item.title}
-                    className={`h-1 flex-1 rounded-full ${number <= index ? "bg-yellow-400" : "bg-zinc-800"}`}
+                    className={`h-1 flex-1 rounded-full ${number <= index ? "bg-signal" : "bg-ground"}`}
                   />
                 ))}
               </div>
@@ -321,7 +321,7 @@ export default function Tutorial({ role }: { role: UserRole }) {
                   type="button"
                   disabled={index === 0}
                   onClick={() => setIndex((value) => Math.max(0, value - 1))}
-                  className="flex items-center gap-1.5 rounded-xl px-3 py-3 text-sm text-zinc-300 hover:bg-zinc-800 disabled:invisible"
+                  className="flex items-center gap-1.5 rounded-xl px-3 py-3 text-sm text-ink2 hover:bg-ground disabled:invisible"
                 >
                   <ArrowLeft size={16} aria-hidden="true" />
                   {t("back")}
@@ -329,7 +329,7 @@ export default function Tutorial({ role }: { role: UserRole }) {
                 <button
                   type="button"
                   onClick={() => (last ? dismiss() : setIndex((value) => value + 1))}
-                  className="flex items-center justify-center gap-2 rounded-xl bg-yellow-400 px-5 py-3 text-sm font-bold text-black hover:bg-yellow-300"
+                  className="flex items-center justify-center gap-2 rounded-xl bg-signal px-5 py-3 text-sm font-bold text-ink hover:bg-signal-hover"
                 >
                   {last ? t("finish") : t("continue")}
                   {last ? <Check size={17} aria-hidden="true" /> : <ArrowRight size={17} aria-hidden="true" />}

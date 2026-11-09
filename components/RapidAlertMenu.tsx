@@ -37,7 +37,7 @@ export default function RapidAlertMenu({
   }
 
   return (
-    <div className="absolute right-3 top-16 z-20 flex flex-col items-end gap-2">
+    <div className="pointer-events-auto relative">
       <button
         type="button"
         aria-label={t("alert_open")}
@@ -47,35 +47,35 @@ export default function RapidAlertMenu({
           setOpen(!open);
           setFeedback("");
         }}
-        className="rounded-full bg-yellow-400 p-3 text-black shadow-xl"
+        className="flex h-[52px] w-[52px] items-center justify-center rounded-[18px] bg-white text-signal-dark shadow-float"
       >
         {open ? <X size={22} /> : <AlertTriangle size={22} />}
       </button>
       {open && (
-        <div className="w-64 space-y-2 rounded-2xl border border-zinc-700 bg-zinc-950 p-3 shadow-xl">
+        <div className="absolute right-0 top-full mt-2 w-64 space-y-2 rounded-[22px] bg-white p-3 shadow-[0_14px_36px_rgba(13,27,42,0.28)]">
           {ALERTS.map(({ type, icon }) => (
             <button
               key={type}
               type="button"
               disabled={busy}
               onClick={() => void send(type)}
-              className="w-full rounded-xl bg-zinc-800 p-3 text-left text-sm disabled:opacity-50"
+              className="w-full rounded-xl bg-ground p-3 text-left text-sm disabled:opacity-50"
             >
               <span aria-hidden="true">{icon}</span> {t(`alert_${type}`)}
             </button>
           ))}
           {feedback && (
-            <p role="status" className="p-2 text-xs text-zinc-300">
+            <p role="status" className="p-2 text-xs text-ink2">
               {feedback}
             </p>
           )}
           {producerPhone && (
             <>
-              <a className="block rounded-xl p-3 text-sm text-yellow-400" href={`tel:${producerPhone.replace(/[^+\d]/g, "")}`}>
+              <a className="block rounded-xl p-3 text-sm text-signal-text" href={`tel:${producerPhone.replace(/[^+\d]/g, "")}`}>
                 {t("call_producer")}
               </a>
               <a
-                className="block rounded-xl p-3 text-sm text-yellow-400"
+                className="block rounded-xl p-3 text-sm text-signal-text"
                 target="_blank"
                 rel="noopener noreferrer"
                 href={`https://wa.me/${producerPhone.replace(/\D/g, "")}?text=${encodeURIComponent(

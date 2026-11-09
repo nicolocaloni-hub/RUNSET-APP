@@ -119,8 +119,8 @@ function Root() {
   if (session === undefined || inviteToken) return <CenteredMessage text={inviteToken ? t("joining") : t("loading")} />;
   if (session && recovery)
     return (
-      <main className="flex h-[100dvh] items-center justify-center bg-zinc-950 p-5">
-        <div className="w-full max-w-md space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
+      <main className="flex h-[100dvh] items-center justify-center bg-white p-5">
+        <div className="w-full max-w-md space-y-4 rounded-2xl border border-line bg-ground p-5">
           <h1 className="text-xl font-semibold">{t("recovery_title")}</h1>
           <PasswordForm onDone={() => setRecovery(false)} />
         </div>

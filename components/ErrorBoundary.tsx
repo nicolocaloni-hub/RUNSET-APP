@@ -5,7 +5,7 @@ import { primaryButton } from "./ui";
 function Crash() {
   const { t } = usePrefs();
   return (
-    <main className="flex h-[100dvh] flex-col items-center justify-center gap-5 bg-zinc-950 p-6 text-center">
+    <main className="flex h-[100dvh] flex-col items-center justify-center gap-5 bg-white p-6 text-center">
       <p className="text-lg font-semibold">{t("crash_title")}</p>
       <button type="button" onClick={() => window.location.reload()} className={primaryButton}>
         {t("crash_reload")}

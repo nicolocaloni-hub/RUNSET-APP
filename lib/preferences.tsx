@@ -38,7 +38,7 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
     if (saved === "it" || saved === "en") return saved;
     return navigator.language?.toLowerCase().startsWith("it") ? "it" : "en";
   });
-  const [mapTheme, setTheme] = useState<MapTheme>(() => (stored("runset_map_theme") === "light" ? "light" : "dark"));
+  const [mapTheme, setTheme] = useState<MapTheme>(() => (stored("runset_map_theme") === "dark" ? "dark" : "light"));
 
   const t = useCallback(
     (key: TranslationKey, params?: Record<string, string | number>) => {

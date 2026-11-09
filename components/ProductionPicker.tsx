@@ -39,34 +39,34 @@ export default function ProductionPicker({
   }
 
   return (
-    <main className="flex h-[100dvh] items-start justify-center overflow-y-auto bg-zinc-950 p-5">
+    <main className="flex h-[100dvh] items-start justify-center overflow-y-auto bg-white p-5">
       <div className="my-auto w-full max-w-md space-y-6 py-8">
         <h1 className="flex items-center gap-3 text-3xl font-black tracking-tight">
-          <Clapperboard className="text-yellow-400" />
+          <Clapperboard className="text-signal-text" />
           {t("productions_title")}
         </h1>
-        {memberships.length === 0 && !canCreate && <p className="text-zinc-300">{t("no_access_runner")}</p>}
+        {memberships.length === 0 && !canCreate && <p className="text-ink2">{t("no_access_runner")}</p>}
         <div className="space-y-2">
           {memberships.map((m) => (
             <button
               key={m.productionId}
               type="button"
               onClick={() => onOpen(m)}
-              className="flex w-full items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-left"
+              className="flex w-full items-center gap-3 rounded-2xl border border-line bg-ground p-4 text-left"
             >
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-semibold">{m.productionName}</span>
-                <span className="text-xs text-zinc-400">
+                <span className="text-xs text-muted">
                   {m.role === UserRole.PRODUCER ? t("role_producer") : t("role_runner")}
                 </span>
               </span>
-              <ChevronRight size={18} className="text-zinc-500" />
+              <ChevronRight size={18} className="text-muted" />
             </button>
           ))}
         </div>
         {canCreate &&
           (creating ? (
-            <form onSubmit={create} className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
+            <form onSubmit={create} className="space-y-4 rounded-2xl border border-line bg-ground p-5">
               <h2 className="text-xl font-semibold">{t("production_new")}</h2>
               <label className={fieldLabel}>
                 {t("production_name")}
@@ -91,7 +91,7 @@ export default function ProductionPicker({
                 />
               </label>
               {error && (
-                <p role="alert" className="text-sm text-red-300">
+                <p role="alert" className="text-sm text-red-700">
                   {error}
                 </p>
               )}
@@ -105,7 +105,7 @@ export default function ProductionPicker({
               {t("production_new")}
             </button>
           ))}
-        <button type="button" onClick={() => void onSignOut()} className="flex items-center gap-2 text-sm text-zinc-400">
+        <button type="button" onClick={() => void onSignOut()} className="flex items-center gap-2 text-sm text-muted">
           <LogOut size={16} />
           {t("sign_out")}
         </button>

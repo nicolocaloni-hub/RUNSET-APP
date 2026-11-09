@@ -44,10 +44,10 @@ export default function PasswordForm({ onDone }: { onDone?: () => void }) {
           onChange={(e) => setPassword(e.target.value)}
           className={field}
         />
-        <span className="mt-1.5 block font-normal text-zinc-500">{t("password_hint")}</span>
+        <span className="mt-1.5 block font-normal text-muted">{t("password_hint")}</span>
       </label>
       {message && (
-        <p role={message.ok ? "status" : "alert"} className={`text-sm ${message.ok ? "text-emerald-300" : "text-red-300"}`}>
+        <p role={message.ok ? "status" : "alert"} className={`text-sm ${message.ok ? "text-emerald-700" : "text-red-700"}`}>
           {message.text}
         </p>
       )}

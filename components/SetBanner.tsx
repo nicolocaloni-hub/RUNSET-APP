@@ -67,7 +67,7 @@ export default function SetBanner({
       closeDisabled={busy}
       badge={
         initialLocation && (
-          <span className="flex items-center gap-1 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-2 py-0.5 text-[10px] font-bold text-yellow-500">
+          <span className="flex items-center gap-1 rounded-full border border-signal/40 bg-signal-soft px-2 py-0.5 text-[10px] font-bold text-signal-text">
             <Crosshair size={10} />
             {t("map_pin")}
           </span>
@@ -136,7 +136,7 @@ export default function SetBanner({
           />
         </label>
         {error && (
-          <p role="alert" className="text-sm text-red-400">
+          <p role="alert" className="text-sm text-red-700">
             {error}
           </p>
         )}

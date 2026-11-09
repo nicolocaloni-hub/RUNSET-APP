@@ -8,14 +8,14 @@ export interface Session {
   dayNumber: number;
 }
 
-export type EventType = "PICKUP" | "UNDO" | "ALERT" | "SET" | "DAY";
+export type EventType = "PICKUP" | "UNDO" | "ALERT" | "SET" | "DAY" | "ARRIVING";
 export type AlertType = "TRAFFIC" | "INCIDENT" | "FUEL";
 
 export interface RunEvent {
   id: string;
   type: EventType;
   /** Names captured when the event happened; rendered in the viewer's language. */
-  data: { person?: string; runner?: string; set?: string; address?: string; alert?: AlertType; day?: number };
+  data: { person?: string; runner?: string; set?: string; address?: string; alert?: AlertType; day?: number; meters?: number };
   createdAt: number;
   runnerId?: string;
   personId?: string;

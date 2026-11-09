@@ -178,6 +178,26 @@ describe("posizione GPS", () => {
     ).rejects.toThrow(/invalid_position/);
   });
 
+  it("avvisa una sola volta quando il runner è entro 250 m da una persona assegnata", async () => {
+    const arriving = async () =>
+      (await db.query<{ data: { meters: number; person: string } }>("select data from public.events where type='ARRIVING'")).rows;
+    // Sara is at 41.9, 12.5: ~1.1 km north first, then ~110 m away.
+    // The first test already reported her exact spot, so start from a clean slate.
+    await db.query("delete from public.events where type='ARRIVING'");
+    await rpc(RUNNER_DEVICE, "public.report_position($1,true,$2,41.91,12.5,8)", [production, at(20_000)], true);
+    expect(await arriving()).toEqual([]);
+    await db.query("update public.runner_positions set updated_at = now() - interval '5 seconds'");
+    await rpc(RUNNER_DEVICE, "public.report_position($1,true,$2,41.901,12.5,8)", [production, at(30_000)], true);
+    const first = await arriving();
+    expect(first).toHaveLength(1);
+    expect(first[0].data.person).toBe("Sara Attrice");
+    expect(first[0].data.meters).toBeGreaterThan(100);
+    expect(first[0].data.meters).toBeLessThan(120);
+    await db.query("update public.runner_positions set updated_at = now() - interval '5 seconds'");
+    await rpc(RUNNER_DEVICE, "public.report_position($1,true,$2,41.9005,12.5,8)", [production, at(40_000)], true);
+    expect(await arriving()).toHaveLength(1);
+  });
+
   it("il produttore non può inviare posizioni", async () => {
     await expect(rpc(PRODUCER, "public.report_position($1,false,$2)", [production, at(0)])).rejects.toThrow(/runner_required/);
   });

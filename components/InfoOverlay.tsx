@@ -61,23 +61,23 @@ export default function InfoOverlay({
           <h2 className="break-words text-2xl font-bold tracking-tight">{entity.name}</h2>
           {set ? (
             set.address && (
-              <p className="flex items-center gap-1.5 text-xs text-zinc-400">
-                <MapPin size={12} className="text-yellow-500/60" />
+              <p className="flex items-center gap-1.5 text-xs text-muted">
+                <MapPin size={12} className="text-signal-text/60" />
                 {set.address}
               </p>
             )
           ) : (
             <>
-              <p className="text-xs font-bold uppercase tracking-widest text-blue-400">{person!.role}</p>
-              {person!.address && <p className="text-xs text-zinc-400">{person!.address}</p>}
+              <p className="text-xs font-bold uppercase tracking-widest text-blue-700">{person!.role}</p>
+              {person!.address && <p className="text-xs text-muted">{person!.address}</p>}
               {person!.isRecovered && (
-                <p className="flex items-center gap-1 text-sm text-zinc-300">
+                <p className="flex items-center gap-1 text-sm text-ink2">
                   <CheckCircle2 size={14} />
                   {person!.recoveredAt ? t("recovered_at", { time: formatTime(person!.recoveredAt) }) : t("recovered")}
                 </p>
               )}
               {person!.category === "RUNNER" && (
-                <p className="text-xs text-zinc-400">
+                <p className="text-xs text-muted">
                   {person!.lastSeen
                     ? `${t("last_position", { time: formatDateTime(person!.lastSeen) })}${
                         typeof person!.accuracy === "number" ? ` · ${t("precision", { m: Math.round(person!.accuracy) })}` : ""
@@ -96,7 +96,7 @@ export default function InfoOverlay({
                 onClick={() => onEdit(entity)}
                 disabled={busy}
                 aria-label={t("edit_name", { name: entity.name })}
-                className="rounded-2xl bg-zinc-800 p-3 text-zinc-300 hover:bg-zinc-700"
+                className="rounded-2xl bg-ground p-3 text-ink2 hover:bg-line"
               >
                 <Pencil size={18} />
               </button>
@@ -107,7 +107,7 @@ export default function InfoOverlay({
                 onClick={() => void attempt(() => onDelete(entity), t("delete_confirm", { name: entity.name }))}
                 disabled={busy}
                 aria-label={t("delete_name", { name: entity.name })}
-                className="rounded-2xl bg-red-500/10 p-3 text-red-500 hover:bg-red-500/20 disabled:opacity-40"
+                className="rounded-2xl bg-red-50 p-3 text-red-700 hover:bg-red-100 disabled:opacity-40"
               >
                 {busy ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
               </button>
@@ -116,16 +116,16 @@ export default function InfoOverlay({
         )}
       </div>
       {error && (
-        <p role="alert" className="mb-4 text-sm text-red-400">
+        <p role="alert" className="mb-4 text-sm text-red-700">
           {error}
         </p>
       )}
       <div className="mb-6 grid gap-3">
         {set?.managerName && (
-          <div className="flex items-center gap-3 rounded-2xl border border-zinc-800/60 bg-zinc-900/40 p-4">
-            <User size={14} className="text-zinc-500" />
+          <div className="flex items-center gap-3 rounded-2xl border border-line bg-ground p-4">
+            <User size={14} className="text-muted" />
             <div>
-              <p className="text-[10px] font-bold uppercase text-zinc-500">{t("set_manager")}</p>
+              <p className="text-[10px] font-bold uppercase text-muted">{t("set_manager")}</p>
               <p className="text-sm font-semibold">{set.managerName}</p>
             </div>
           </div>
@@ -134,21 +134,21 @@ export default function InfoOverlay({
           <a
             href={telHref(entity.phone)}
             aria-label={t("call_name", { name: entity.name })}
-            className="flex items-center gap-3 rounded-2xl border border-zinc-800/60 bg-zinc-900/40 p-4"
+            className="flex items-center gap-3 rounded-2xl border border-line bg-ground p-4"
           >
-            <Phone size={14} className="text-blue-500" />
+            <Phone size={14} className="text-blue-700" />
             <div>
-              <p className="text-[10px] font-bold uppercase text-zinc-500">{t("direct_contact")}</p>
-              <p className="text-sm font-bold text-blue-400">{entity.phone}</p>
+              <p className="text-[10px] font-bold uppercase text-muted">{t("direct_contact")}</p>
+              <p className="text-sm font-bold text-blue-700">{entity.phone}</p>
             </div>
           </a>
         )}
         {set?.note && (
-          <div className="flex items-start gap-3 rounded-2xl border border-zinc-800/60 bg-zinc-900/40 p-4">
-            <Clipboard size={14} className="mt-0.5 text-zinc-500" />
+          <div className="flex items-start gap-3 rounded-2xl border border-line bg-ground p-4">
+            <Clipboard size={14} className="mt-0.5 text-muted" />
             <div>
-              <p className="text-[10px] font-bold uppercase text-zinc-500">{t("operative_notes")}</p>
-              <p className="whitespace-pre-line text-xs leading-snug text-zinc-300">{set.note}</p>
+              <p className="text-[10px] font-bold uppercase text-muted">{t("operative_notes")}</p>
+              <p className="whitespace-pre-line text-xs leading-snug text-ink2">{set.note}</p>
             </div>
           </div>
         )}
@@ -158,7 +158,7 @@ export default function InfoOverlay({
           type="button"
           disabled={busy}
           onClick={() => void attempt(() => onUndo!(person!), t("undo_confirm", { name: entity.name }))}
-          className="mb-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-zinc-700 py-3 text-sm text-zinc-200 hover:bg-zinc-900"
+          className="mb-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-line2 py-3 text-sm text-ink2 hover:bg-ground"
         >
           <RotateCcw size={16} />
           {t("undo_pickup")}
@@ -168,11 +168,11 @@ export default function InfoOverlay({
         <a
           href={entity.phone ? telHref(entity.phone) : undefined}
           aria-disabled={!entity.phone}
-          className={`flex items-center justify-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-900 py-4 text-xs font-bold uppercase tracking-widest ${
-            entity.phone ? "hover:bg-blue-500/10" : "pointer-events-none opacity-30"
+          className={`flex items-center justify-center gap-2 rounded-2xl border border-line bg-ground py-4 text-xs font-bold uppercase tracking-widest ${
+            entity.phone ? "hover:bg-blue-50" : "pointer-events-none opacity-30"
           }`}
         >
-          <Phone size={16} className="text-blue-500" />
+          <Phone size={16} className="text-blue-700" />
           {t("call")}
         </a>
         <a
@@ -184,11 +184,11 @@ export default function InfoOverlay({
           target="_blank"
           rel="noopener noreferrer"
           aria-disabled={!canNavigate}
-          className={`flex items-center justify-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-900 py-4 text-xs font-bold uppercase tracking-widest ${
-            canNavigate ? "hover:bg-yellow-500/10" : "pointer-events-none opacity-30"
+          className={`flex items-center justify-center gap-2 rounded-2xl border border-line bg-ground py-4 text-xs font-bold uppercase tracking-widest ${
+            canNavigate ? "hover:bg-signal-soft" : "pointer-events-none opacity-30"
           }`}
         >
-          <Navigation size={16} className="text-yellow-500" />
+          <Navigation size={16} className="text-signal-text" />
           {t("navigate")}
         </a>
       </div>

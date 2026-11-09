@@ -50,7 +50,7 @@ export default function SettingsPanel({
     <div className="space-y-7">
       {producer && (
         <section className="space-y-3">
-          <h3 className="text-xs uppercase tracking-widest text-zinc-500">{t("settings_production")}</h3>
+          <h3 className="text-xs uppercase tracking-widest text-muted">{t("settings_production")}</h3>
           <form
             className="space-y-3"
             onSubmit={(e) => {
@@ -92,9 +92,9 @@ export default function SettingsPanel({
               {busy ? t("saving") : t("save")}
             </button>
           </form>
-          <div className="rounded-xl border border-zinc-800 p-4">
+          <div className="rounded-xl border border-line p-4">
             <p className="mb-1 font-semibold">{t("new_day")}</p>
-            <p className="mb-3 text-xs leading-relaxed text-zinc-400">{t("new_day_text")}</p>
+            <p className="mb-3 text-xs leading-relaxed text-muted">{t("new_day_text")}</p>
             <button
               type="button"
               disabled={busy}
@@ -112,7 +112,7 @@ export default function SettingsPanel({
       )}
 
       {status && (
-        <p role="status" className="text-sm text-yellow-200">
+        <p role="status" className="text-sm text-signal-text">
           {status}
         </p>
       )}
@@ -121,18 +121,18 @@ export default function SettingsPanel({
         <button
           type="button"
           onClick={() => setMapTheme(mapTheme === "dark" ? "light" : "dark")}
-          className="flex w-full items-center gap-3 rounded-xl bg-zinc-800 p-3"
+          className="flex w-full items-center gap-3 rounded-xl bg-ground p-3"
         >
           {mapTheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
           {mapTheme === "dark" ? t("map_light") : t("map_dark")}
         </button>
-        <label className="flex w-full items-center gap-3 rounded-xl bg-zinc-800 p-3">
+        <label className="flex w-full items-center gap-3 rounded-xl bg-ground p-3">
           <Languages size={18} />
           <span className="flex-1">{t("language")}</span>
           <select
             value={language}
             onChange={(e) => setLanguage(e.target.value === "en" ? "en" : "it")}
-            className="rounded-lg bg-zinc-900 px-2 py-1 text-sm"
+            className="rounded-lg bg-ground px-2 py-1 text-sm"
           >
             <option value="it">Italiano</option>
             <option value="en">English</option>
@@ -143,17 +143,17 @@ export default function SettingsPanel({
           onClick={async () =>
             setStatus((await NotificationService.requestPermission()) ? t("notifications_on") : t("notifications_off"))
           }
-          className="flex w-full items-center gap-3 rounded-xl bg-zinc-800 p-3"
+          className="flex w-full items-center gap-3 rounded-xl bg-ground p-3"
         >
           <Bell size={18} />
           {t("notifications_enable")}
         </button>
-        <p className="text-xs leading-relaxed text-zinc-400">{t("notifications_note")}</p>
+        <p className="text-xs leading-relaxed text-muted">{t("notifications_note")}</p>
       </section>
 
       {producer && (
         <section className="space-y-3">
-          <h3 className="text-xs uppercase tracking-widest text-zinc-500">{t("account")}</h3>
+          <h3 className="text-xs uppercase tracking-widest text-muted">{t("account")}</h3>
           <PasswordForm />
           <button
             type="button"
@@ -179,7 +179,7 @@ export default function SettingsPanel({
         <button
           type="button"
           onClick={() => void onLogout()}
-          className="flex w-full items-center justify-center gap-3 rounded-xl border border-zinc-700 p-3 text-zinc-300"
+          className="flex w-full items-center justify-center gap-3 rounded-xl border border-line2 p-3 text-ink2"
         >
           <LogOut size={18} />
           {t("leave")}
@@ -188,9 +188,9 @@ export default function SettingsPanel({
       </section>
 
       {producer && (
-        <section className="space-y-3 rounded-xl border border-red-900/60 p-4">
-          <h3 className="text-xs uppercase tracking-widest text-red-400">{t("danger_zone")}</h3>
-          <p className="text-xs leading-relaxed text-zinc-400">{t("delete_production_text")}</p>
+        <section className="space-y-3 rounded-xl border border-red-200 p-4">
+          <h3 className="text-xs uppercase tracking-widest text-red-700">{t("danger_zone")}</h3>
+          <p className="text-xs leading-relaxed text-muted">{t("delete_production_text")}</p>
           <button
             type="button"
             disabled={busy}

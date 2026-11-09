@@ -83,7 +83,7 @@ export default function AddressSearch({
             disabled={busy || address.trim().length < 3}
             aria-label={t("search_address")}
             title={t("search_address")}
-            className="shrink-0 rounded-xl bg-zinc-800 px-3 text-zinc-200 hover:bg-zinc-700 disabled:opacity-40"
+            className="shrink-0 rounded-xl bg-ground px-3 text-ink2 hover:bg-line disabled:opacity-40"
           >
             {busy ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}
           </button>
@@ -91,7 +91,7 @@ export default function AddressSearch({
       </label>
       {results.length > 1 && (
         <fieldset className="mt-2 space-y-1.5">
-          <legend className="mb-1 text-xs text-zinc-400">{t("address_choose")}</legend>
+          <legend className="mb-1 text-xs text-muted">{t("address_choose")}</legend>
           {results.map((result) => (
             <button
               key={`${result.lat},${result.lng}`}
@@ -100,7 +100,7 @@ export default function AddressSearch({
                 onLocation(result, result.label);
                 setResults([]);
               }}
-              className="block w-full rounded-lg border border-zinc-800 bg-zinc-900 p-2.5 text-left text-xs text-zinc-200 hover:border-yellow-500"
+              className="block w-full rounded-lg border border-line bg-ground p-2.5 text-left text-xs text-ink2 hover:border-signal"
             >
               {result.label}
             </button>
@@ -108,7 +108,7 @@ export default function AddressSearch({
         </fieldset>
       )}
       {location && !results.length && (
-        <p className="mt-2 flex items-start gap-1.5 text-xs text-emerald-300">
+        <p className="mt-2 flex items-start gap-1.5 text-xs text-emerald-700">
           <MapPin size={13} className="mt-0.5 shrink-0" />
           <span>
             {pinned ? t("map_pin_note") : `${t("address_found")} ${locationLabel || `${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}`}`}
@@ -116,7 +116,7 @@ export default function AddressSearch({
         </p>
       )}
       {error && (
-        <p role="alert" className="mt-2 text-xs text-red-400">
+        <p role="alert" className="mt-2 text-xs text-red-700">
           {error}
         </p>
       )}

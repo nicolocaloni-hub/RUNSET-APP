@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ArrowRight, Clapperboard, Link2, ShieldCheck, Truck } from "lucide-react";
+import { ArrowRight, Link2, ShieldCheck, Truck } from "lucide-react";
 import { client } from "../lib/supabase";
 import { usePrefs } from "../lib/preferences";
 import { errorCode } from "../services/store";
@@ -59,17 +59,20 @@ export default function AccessGate({ initialError }: { initialError?: string }) 
   const button = mode === "signup" ? t("signup_button") : mode === "reset" ? t("reset_button") : t("login_button");
 
   return (
-    <main className="flex h-[100dvh] items-start justify-center overflow-y-auto bg-zinc-950 p-5">
-      <div className="my-auto w-full max-w-md py-8">
-        <div className="mb-6 inline-flex rounded-2xl bg-yellow-400 p-3 text-black">
-          <Clapperboard size={32} />
-        </div>
-        <p className="text-xs font-bold tracking-[.25em] text-yellow-400">{t("app_tagline")}</p>
-        <h1 className="mb-4 mt-3 text-5xl font-black tracking-tight">
-          RunSet<span className="text-yellow-400">.</span>
-        </h1>
-        <p className="mb-8 text-zinc-400">{t("app_intro")}</p>
-        <div className="mb-6 grid grid-cols-2 gap-2" role="tablist">
+    <main className="flex h-[100dvh] flex-col overflow-y-auto bg-ink">
+      <header className="mx-auto w-full max-w-md px-6 pb-8 pt-14 text-white">
+        <span className="flex items-center gap-2.5">
+          <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24">
+            <path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7Z" fill="#FF5B1F" />
+            <circle cx="12" cy="9" r="2.6" fill="#ffffff" />
+          </svg>
+          <h1 className="font-display text-[34px] font-extrabold tracking-tight">RunSet</h1>
+        </span>
+        <p className="mt-3 font-mono text-[11px] font-semibold tracking-widest text-signal">{t("app_tagline")}</p>
+        <p className="mt-2 max-w-xs font-display text-[22px] font-semibold leading-tight">{t("app_intro")}</p>
+      </header>
+      <div className="mx-auto w-full max-w-md flex-1 rounded-t-[26px] bg-white px-5 pb-7 pt-5 md:mb-8 md:flex-none md:rounded-[26px]">
+        <div className="mb-5 grid grid-cols-2 gap-1 rounded-2xl bg-ground p-1" role="tablist">
           {(
             [
               { key: "login", Icon: ShieldCheck, label: t("tab_producer"), active: mode !== "runner" },
@@ -83,7 +86,9 @@ export default function AccessGate({ initialError }: { initialError?: string }) 
               aria-selected={active}
               disabled={busy}
               onClick={() => switchMode(key)}
-              className={`flex items-center justify-center gap-2 rounded-xl p-3 ${active ? "bg-zinc-700" : "bg-zinc-900 text-zinc-400"}`}
+              className={`flex min-h-[44px] items-center justify-center gap-2 rounded-xl font-display text-sm font-semibold ${
+                active ? "bg-white text-ink shadow-[0_2px_6px_rgba(13,27,42,0.12)]" : "text-muted"
+              }`}
             >
               <Icon size={18} />
               {label}
@@ -92,22 +97,22 @@ export default function AccessGate({ initialError }: { initialError?: string }) 
         </div>
 
         {mode === "runner" ? (
-          <section className="space-y-3 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
-            <h2 className="flex items-center gap-2 text-xl font-semibold">
-              <Link2 size={20} className="text-yellow-400" />
+          <section className="space-y-3">
+            <h2 className="flex items-center gap-2 font-display text-[22px] font-bold">
+              <Link2 size={20} className="text-signal-text" />
               {t("runner_title")}
             </h2>
-            <p className="text-sm leading-relaxed text-zinc-300">{t("runner_help")}</p>
-            <p className="text-xs text-zinc-500">{t("runner_link_once")}</p>
+            <p className="text-sm leading-relaxed text-ink2">{t("runner_help")}</p>
+            <p className="text-xs text-muted">{t("runner_link_once")}</p>
             {message && (
-              <p role="alert" className="text-sm text-red-300">
+              <p role="alert" className="text-sm text-red-700">
                 {message.text}
               </p>
             )}
           </section>
         ) : (
-          <form onSubmit={submit} className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
-            <h2 className="text-xl font-semibold">{title}</h2>
+          <form onSubmit={submit} className="space-y-4">
+            <h2 className="font-display text-[22px] font-bold">{title}</h2>
             <label className={fieldLabel}>
               {t("email")}
               <input
@@ -133,25 +138,25 @@ export default function AccessGate({ initialError }: { initialError?: string }) 
                   onChange={(e) => setPassword(e.target.value)}
                   className={field}
                 />
-                {mode === "signup" && <span className="mt-1.5 block font-normal text-zinc-500">{t("password_hint")}</span>}
+                {mode === "signup" && <span className="mt-1.5 block font-normal text-muted">{t("password_hint")}</span>}
               </label>
             )}
             {message && (
-              <p role={message.ok ? "status" : "alert"} className={`text-sm ${message.ok ? "text-emerald-300" : "text-red-300"}`}>
+              <p role={message.ok ? "status" : "alert"} className={`text-sm ${message.ok ? "text-emerald-700" : "text-red-700"}`}>
                 {message.text}
               </p>
             )}
-            <button disabled={busy} className={primaryButton + " w-full py-3.5"}>
+            <button disabled={busy} className={primaryButton + " min-h-[56px] w-full text-base"}>
               {busy ? t("saving") : button}
               <ArrowRight size={18} />
             </button>
-            <div className="flex flex-col gap-2 pt-1 text-sm text-zinc-300">
+            <div className="flex flex-col gap-2 pt-1 text-sm text-ink2">
               {mode === "login" && (
                 <>
                   <button type="button" disabled={busy} onClick={() => switchMode("signup")}>
                     {t("to_signup")}
                   </button>
-                  <button type="button" disabled={busy} onClick={() => switchMode("reset")} className="text-zinc-400">
+                  <button type="button" disabled={busy} onClick={() => switchMode("reset")} className="text-muted">
                     {t("to_reset")}
                   </button>
                 </>
@@ -164,7 +169,7 @@ export default function AccessGate({ initialError }: { initialError?: string }) 
             </div>
           </form>
         )}
-        <p className="mt-8 text-xs leading-relaxed text-zinc-500">{t("access_footer")}</p>
+        <p className="mt-8 text-xs leading-relaxed text-muted">{t("access_footer")}</p>
         <div className="mt-3">
           <PrivacyDialog />
         </div>

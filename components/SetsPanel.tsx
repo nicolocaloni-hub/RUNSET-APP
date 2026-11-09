@@ -24,16 +24,16 @@ export default function SetsPanel({
           {t("add_set")}
         </button>
       )}
-      {sets.length === 0 && <p className="text-sm text-zinc-400">{t("sets_empty")}</p>}
+      {sets.length === 0 && <p className="text-sm text-muted">{t("sets_empty")}</p>}
       {sets.map((s) => (
         <button
           key={s.id}
           type="button"
           onClick={() => onSelect(s)}
-          className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-left"
+          className="w-full rounded-xl border border-line bg-ground p-4 text-left"
         >
           <p className="mb-1 font-bold">🎬 {s.name}</p>
-          <p className="text-xs text-zinc-400">{s.address || t("map_point")}</p>
+          <p className="text-xs text-muted">{s.address || t("map_point")}</p>
         </button>
       ))}
     </>

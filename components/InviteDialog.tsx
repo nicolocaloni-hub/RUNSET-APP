@@ -24,12 +24,12 @@ export default function InviteDialog({
   const canShare = typeof navigator.share === "function";
 
   return (
-    <div className="fixed inset-0 z-[4000] flex items-center justify-center bg-black/75 p-5">
+    <div className="fixed inset-0 z-[4000] flex items-center justify-center bg-ink/40 p-5">
       <section
         role="dialog"
         aria-modal="true"
         aria-label={t("invite_title", { name })}
-        className="w-full max-w-md space-y-4 rounded-2xl border border-zinc-700 bg-zinc-900 p-5"
+        className="w-full max-w-md space-y-4 rounded-2xl border border-line2 bg-ground p-5"
       >
         <div className="flex justify-between gap-3">
           <h2 className="text-xl font-bold">{t("invite_title", { name })}</h2>
@@ -37,13 +37,13 @@ export default function InviteDialog({
             <X size={22} />
           </button>
         </div>
-        <p className="text-sm text-zinc-400">{t("invite_text", { name })}</p>
+        <p className="text-sm text-muted">{t("invite_text", { name })}</p>
         <input
           readOnly
           value={link}
           onFocus={(e) => e.currentTarget.select()}
           aria-label={t("invite_copy")}
-          className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 font-mono text-xs"
+          className="w-full rounded-xl border border-line2 bg-white px-3 py-2.5 font-mono text-xs"
         />
         <div className="grid gap-2">
           {canShare && (
@@ -81,8 +81,8 @@ export default function InviteDialog({
             {copied ? t("copied") : t("invite_copy")}
           </button>
         </div>
-        {error && <p className="text-xs text-red-300">{error}</p>}
-        <p className="text-xs text-zinc-500">{t("invite_once")}</p>
+        {error && <p className="text-xs text-red-700">{error}</p>}
+        <p className="text-xs text-muted">{t("invite_once")}</p>
       </section>
     </div>
   );
