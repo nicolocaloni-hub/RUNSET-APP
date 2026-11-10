@@ -4,6 +4,7 @@ import { client } from "../lib/supabase";
 import { usePrefs } from "../lib/preferences";
 import { errorCode } from "../services/store";
 import { MIN_PASSWORD } from "./PasswordForm";
+import LoginBackdrop from "./LoginBackdrop";
 import PrivacyDialog from "./PrivacyDialog";
 import { field, fieldLabel, primaryButton } from "./ui";
 
@@ -59,19 +60,28 @@ export default function AccessGate({ initialError }: { initialError?: string }) 
   const button = mode === "signup" ? t("signup_button") : mode === "reset" ? t("reset_button") : t("login_button");
 
   return (
-    <main className="flex h-[100dvh] flex-col overflow-y-auto bg-ink">
-      <header className="mx-auto w-full max-w-md px-6 pb-8 pt-14 text-white">
-        <span className="flex items-center gap-2.5">
-          <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24">
-            <path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7Z" fill="#FF5B1F" />
-            <circle cx="12" cy="9" r="2.6" fill="#ffffff" />
-          </svg>
-          <h1 className="font-display text-[34px] font-extrabold tracking-tight">RunSet</h1>
-        </span>
-        <p className="mt-3 font-mono text-[11px] font-semibold tracking-widest text-signal">{t("app_tagline")}</p>
-        <p className="mt-2 max-w-xs font-display text-[22px] font-semibold leading-tight">{t("app_intro")}</p>
+    <main className="relative flex h-[100dvh] flex-col overflow-y-auto bg-ground">
+      <LoginBackdrop />
+      <header className="relative mx-auto w-full max-w-md px-4 pt-4 md:ml-[8vw] md:px-0 md:pt-10">
+        <div className="rounded-[22px] bg-white px-5 py-4 shadow-float">
+          <span className="flex items-center gap-2.5">
+            <svg aria-hidden="true" width="36" height="36" viewBox="0 0 24 24">
+              <path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7Z" fill="#FF5B1F" />
+              <circle cx="12" cy="9" r="2.6" fill="#ffffff" />
+            </svg>
+            <h1 className="font-display text-[30px] font-extrabold tracking-tight text-ink">RunSet</h1>
+            <span className="ml-auto flex items-center gap-1.5 font-mono text-[11px] text-muted">
+              <span aria-hidden="true" className="h-2 w-2 rounded-full bg-live" />
+              ROMA
+            </span>
+          </span>
+          <p className="mt-2 font-mono text-[11px] font-semibold tracking-widest text-signal-dark">{t("app_tagline")}</p>
+          <p className="mt-1 font-display text-lg font-semibold leading-snug text-ink">{t("app_intro")}</p>
+        </div>
       </header>
-      <div className="mx-auto w-full max-w-md flex-1 rounded-t-[26px] bg-white px-5 pb-7 pt-5 md:mb-8 md:flex-none md:rounded-[26px]">
+      {/* Leaves the moving map visible between the header and the form on phones. */}
+      <div aria-hidden="true" className="min-h-[24vh] flex-1 md:hidden" />
+      <div className="relative mx-auto w-full max-w-md rounded-t-[26px] bg-white px-5 pb-7 pt-5 shadow-sheet md:my-6 md:ml-[8vw] md:rounded-[26px] md:shadow-float">
         <div className="mb-5 grid grid-cols-2 gap-1 rounded-2xl bg-ground p-1" role="tablist">
           {(
             [
@@ -173,6 +183,12 @@ export default function AccessGate({ initialError }: { initialError?: string }) 
         <div className="mt-3">
           <PrivacyDialog />
         </div>
+        <p className="mt-3 text-[11px] text-muted">
+          {t("map_credit")}{" "}
+          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="underline">
+            OpenStreetMap
+          </a>
+        </p>
       </div>
     </main>
   );

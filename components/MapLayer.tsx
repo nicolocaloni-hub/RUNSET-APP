@@ -34,7 +34,7 @@ function cachedIcon(key: string, build: () => L.DivIcon) {
   return icon;
 }
 
-const carIcon = (initials: string, name: string, color: string, live: boolean) =>
+export const carIcon = (initials: string, name: string, color: string, live: boolean) =>
   cachedIcon(`car|${initials}|${name}|${color}|${live}`, () =>
     L.divIcon({
       className: "leaflet-custom-marker",
