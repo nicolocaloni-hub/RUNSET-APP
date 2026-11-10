@@ -60,29 +60,29 @@ export default function AccessGate({ initialError }: { initialError?: string }) 
   const button = mode === "signup" ? t("signup_button") : mode === "reset" ? t("reset_button") : t("login_button");
 
   return (
-    <main className="relative flex h-[100dvh] flex-col overflow-y-auto bg-ground">
+    <main className="relative flex h-[100dvh] flex-col overflow-y-auto overscroll-none bg-ground">
       <LoginBackdrop />
       <header className="relative mx-auto w-full max-w-md px-4 pt-4 md:ml-[8vw] md:px-0 md:pt-10">
-        <div className="rounded-[22px] bg-white px-5 py-4 shadow-float">
+        <div className="rounded-[22px] bg-white px-4 py-3 shadow-float md:px-5 md:py-4">
           <span className="flex items-center gap-2.5">
-            <svg aria-hidden="true" width="36" height="36" viewBox="0 0 24 24">
+            <svg aria-hidden="true" viewBox="0 0 24 24" className="h-7 w-7 md:h-9 md:w-9">
               <path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7Z" fill="#FF5B1F" />
               <circle cx="12" cy="9" r="2.6" fill="#ffffff" />
             </svg>
-            <h1 className="font-display text-[30px] font-extrabold tracking-tight text-ink">RunSet</h1>
+            <h1 className="font-display text-2xl font-extrabold tracking-tight text-ink md:text-[30px]">RunSet</h1>
             <span className="ml-auto flex items-center gap-1.5 font-mono text-[11px] text-muted">
               <span aria-hidden="true" className="h-2 w-2 rounded-full bg-live" />
               ROMA
             </span>
           </span>
-          <p className="mt-2 font-mono text-[11px] font-semibold tracking-widest text-signal-dark">{t("app_tagline")}</p>
-          <p className="mt-1 font-display text-lg font-semibold leading-snug text-ink">{t("app_intro")}</p>
+          <p className="mt-2 hidden font-mono text-[11px] font-semibold tracking-widest text-signal-dark md:block">{t("app_tagline")}</p>
+          <p className="mt-1 font-display text-[15px] font-semibold leading-snug text-ink md:text-lg [@media(max-height:620px)]:hidden">{t("app_intro")}</p>
         </div>
       </header>
-      {/* Leaves the moving map visible between the header and the form on phones. */}
-      <div aria-hidden="true" className="min-h-[24vh] flex-1 md:hidden" />
-      <div className="relative mx-auto w-full max-w-md rounded-t-[26px] bg-white px-5 pb-7 pt-5 shadow-sheet md:my-6 md:ml-[8vw] md:rounded-[26px] md:shadow-float">
-        <div className="mb-5 grid grid-cols-2 gap-1 rounded-2xl bg-ground p-1" role="tablist">
+      {/* The moving map shows through the space left between header and form on phones. */}
+      <div aria-hidden="true" className="min-h-[72px] flex-1 md:hidden [@media(max-height:620px)]:min-h-[40px]" />
+      <div className="relative mx-auto w-full max-w-md rounded-t-[26px] bg-white px-5 pb-5 pt-4 shadow-sheet md:my-6 md:pb-7 md:pt-5 md:ml-[8vw] md:rounded-[26px] md:shadow-float">
+        <div className="mb-3 grid grid-cols-2 gap-1 rounded-2xl bg-ground p-1 md:mb-5" role="tablist">
           {(
             [
               { key: "login", Icon: ShieldCheck, label: t("tab_producer"), active: mode !== "runner" },
@@ -96,7 +96,7 @@ export default function AccessGate({ initialError }: { initialError?: string }) 
               aria-selected={active}
               disabled={busy}
               onClick={() => switchMode(key)}
-              className={`flex min-h-[44px] items-center justify-center gap-2 rounded-xl font-display text-sm font-semibold ${
+              className={`flex min-h-[42px] items-center justify-center gap-2 rounded-xl font-display text-sm font-semibold ${
                 active ? "bg-white text-ink shadow-[0_2px_6px_rgba(13,27,42,0.12)]" : "text-muted"
               }`}
             >
@@ -121,8 +121,8 @@ export default function AccessGate({ initialError }: { initialError?: string }) 
             )}
           </section>
         ) : (
-          <form onSubmit={submit} className="space-y-4">
-            <h2 className="font-display text-[22px] font-bold">{title}</h2>
+          <form onSubmit={submit} className="space-y-3 md:space-y-4">
+            <h2 className="font-display text-xl font-bold md:text-[22px] [@media(max-height:620px)]:sr-only">{title}</h2>
             <label className={fieldLabel}>
               {t("email")}
               <input
@@ -156,11 +156,11 @@ export default function AccessGate({ initialError }: { initialError?: string }) 
                 {message.text}
               </p>
             )}
-            <button disabled={busy} className={primaryButton + " min-h-[56px] w-full text-base"}>
+            <button disabled={busy} className={primaryButton + " min-h-[52px] w-full text-base md:min-h-[56px]"}>
               {busy ? t("saving") : button}
               <ArrowRight size={18} />
             </button>
-            <div className="flex flex-col gap-2 pt-1 text-sm text-ink2">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-sm text-ink2 md:flex-col md:items-stretch md:pt-1">
               {mode === "login" && (
                 <>
                   <button type="button" disabled={busy} onClick={() => switchMode("signup")}>
@@ -179,16 +179,16 @@ export default function AccessGate({ initialError }: { initialError?: string }) 
             </div>
           </form>
         )}
-        <p className="mt-8 text-xs leading-relaxed text-muted">{t("access_footer")}</p>
-        <div className="mt-3">
+        <p className="mt-8 hidden text-xs leading-relaxed text-muted md:block">{t("access_footer")}</p>
+        <div className="mt-4 flex items-center justify-between gap-3 md:mt-3 md:block">
           <PrivacyDialog />
+          <p className="text-[11px] text-muted md:mt-3">
+            {t("map_credit")}{" "}
+            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="underline">
+              OpenStreetMap
+            </a>
+          </p>
         </div>
-        <p className="mt-3 text-[11px] text-muted">
-          {t("map_credit")}{" "}
-          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="underline">
-            OpenStreetMap
-          </a>
-        </p>
       </div>
     </main>
   );

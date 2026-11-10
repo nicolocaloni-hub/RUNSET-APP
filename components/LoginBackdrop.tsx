@@ -20,7 +20,8 @@ function DemoCars() {
     // Center the routes in the part of the screen the cards leave free:
     // right of the card on desktop, the strip between header and form on phones.
     const { innerWidth: w, innerHeight: h } = window;
-    map.panBy(w >= 768 ? [-(w * 0.08 + 448) / 2, 0] : [0, h / 2 - (165 + h * 0.12)], { animate: false });
+    // Phone: header card ends near 84px, form sheet is about 430px tall.
+    map.panBy(w >= 768 ? [-(w * 0.08 + 448) / 2, 0] : [0, h / 2 - (84 + h - 430) / 2], { animate: false });
     const cars = DEMO_ROUTES.map((route, index) => {
       const cumulative = [0];
       for (let i = 1; i < route.path.length; i++) cumulative.push(cumulative[i - 1] + meters(route.path[i - 1], route.path[i]));
