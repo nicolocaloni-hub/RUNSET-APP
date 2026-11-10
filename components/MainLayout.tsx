@@ -24,6 +24,7 @@ import PersonBanner from "./PersonBanner";
 import PickupPrompt from "./PickupPrompt";
 import ProducerSummary from "./ProducerSummary";
 import DaySummary from "./DaySummary";
+import Logo from "./Logo";
 import RapidAlertMenu from "./RapidAlertMenu";
 import RunnerDock from "./RunnerDock";
 import SetBanner from "./SetBanner";
@@ -345,10 +346,7 @@ function Workspace({
 
         <div className="pt-safe pointer-events-none absolute inset-x-3 top-3 z-30 flex items-center gap-2.5 sm:inset-x-4 sm:top-4">
           <div className="pointer-events-auto flex min-w-0 flex-1 items-center gap-2.5 rounded-[18px] bg-white px-3.5 py-2.5 shadow-float">
-            <svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" className="shrink-0">
-              <path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7Z" fill="#FF5B1F" />
-              <circle cx="12" cy="9" r="2.6" fill="#ffffff" />
-            </svg>
+            <Logo className="h-8 w-auto shrink-0 text-ink" />
             <div className="min-w-0">
               <h1 className="truncate font-display text-[15px] font-bold leading-5">
                 {producer ? session.productionName : `${active?.name ?? ""} · ${t("role_runner")}`}

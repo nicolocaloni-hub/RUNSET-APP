@@ -5,6 +5,7 @@ import { usePrefs } from "../lib/preferences";
 import { errorCode } from "../services/store";
 import { MIN_PASSWORD } from "./PasswordForm";
 import LoginBackdrop from "./LoginBackdrop";
+import Logo from "./Logo";
 import PrivacyDialog from "./PrivacyDialog";
 import { field, fieldLabel, primaryButton } from "./ui";
 
@@ -65,11 +66,9 @@ export default function AccessGate({ initialError }: { initialError?: string }) 
       <header className="relative mx-auto w-full max-w-md px-4 pt-4 md:ml-[8vw] md:px-0 md:pt-10">
         <div className="rounded-[22px] bg-white px-4 py-3 shadow-float md:px-5 md:py-4">
           <span className="flex items-center gap-2.5">
-            <svg aria-hidden="true" viewBox="0 0 24 24" className="h-7 w-7 md:h-9 md:w-9">
-              <path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7Z" fill="#FF5B1F" />
-              <circle cx="12" cy="9" r="2.6" fill="#ffffff" />
-            </svg>
-            <h1 className="font-display text-2xl font-extrabold tracking-tight text-ink md:text-[30px]">RunSet</h1>
+            <h1 className="text-ink">
+              <Logo className="h-12 w-auto md:h-16" />
+            </h1>
             <span className="ml-auto flex items-center gap-1.5 font-mono text-[11px] text-muted">
               <span aria-hidden="true" className="h-2 w-2 rounded-full bg-live" />
               ROMA
