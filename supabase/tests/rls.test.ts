@@ -12,7 +12,7 @@ const bootstrap = `
   create role authenticated nologin;
   create role service_role nologin;
   create schema auth;
-  create table auth.users (id uuid primary key, email text);
+  create table auth.users (id uuid primary key, email text, email_confirmed_at timestamptz default now());
   create function auth.jwt() returns jsonb language sql stable as
     $$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
   create function auth.uid() returns uuid language sql stable as
@@ -349,10 +349,10 @@ describe("assistenti di produzione", () => {
 
 describe("notifiche push", () => {
   it("il produttore salva un'iscrizione, un account anonimo no", async () => {
-    await rpc(PRODUCER, "public.save_push_subscription($1,$2,$3,$4)", ["https://push.example/abc", "k", "a", "it"]);
+    await rpc(PRODUCER, "public.save_push_subscription($1,$2,$3,$4)", ["https://fcm.googleapis.com/abc", "k", "a", "it"]);
     expect((await db.query("select user_id from public.push_subscriptions")).rows).toEqual([{ user_id: PRODUCER }]);
     await expect(
-      rpc(ANON, "public.save_push_subscription($1,$2,$3,$4)", ["https://push.example/x", "k", "a", "it"], true),
+      rpc(ANON, "public.save_push_subscription($1,$2,$3,$4)", ["https://fcm.googleapis.com/x", "k", "a", "it"], true),
     ).rejects.toThrow(/producer_account_required/);
     // Subscription keys are never readable from the client, not even your own.
     await expect(as(PRODUCER, "select * from public.push_subscriptions")).rejects.toThrow(/permission denied/);

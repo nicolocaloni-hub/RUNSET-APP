@@ -183,7 +183,7 @@ export default function AccessGate({ initialError }: { initialError?: string }) 
           <PrivacyDialog />
           <p className="text-[11px] text-muted md:mt-3">
             {t("map_credit")}{" "}
-            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="underline">
+            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline">
               OpenStreetMap
             </a>
           </p>

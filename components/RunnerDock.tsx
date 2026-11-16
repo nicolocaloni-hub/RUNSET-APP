@@ -91,7 +91,7 @@ export default function RunnerDock({
                 <a
                   href={`https://www.google.com/maps/dir/?api=1&destination=${p.location.lat},${p.location.lng}`}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   aria-label={t("navigate_to", { name: p.name })}
                   className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-ink text-white"
                 >

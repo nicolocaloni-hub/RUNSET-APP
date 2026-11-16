@@ -19,8 +19,17 @@ const ALERTS = {
 } as const;
 
 // Stessi testi di translations.ts (ev_*, notify_*): qui servono senza l'app aperta.
-function text(type: string, d: Data, lang: Lang): { title: string; body: string } | null {
+const clip = (v: unknown) => (typeof v === "string" ? v.slice(0, 120) : v);
+
+function text(type: string, raw: Data, lang: Lang): { title: string; body: string } | null {
   const it = lang === "it";
+  const d: Data = {
+    ...raw,
+    person: clip(raw.person) as string,
+    runner: clip(raw.runner) as string,
+    alert: clip(raw.alert) as string,
+    time: clip(raw.time) as string,
+  };
   const alert = ALERTS[lang][d.alert as keyof (typeof ALERTS)["it"]] ?? d.alert ?? "";
   switch (type) {
     case "PICKUP":
@@ -52,6 +61,8 @@ function text(type: string, d: Data, lang: Lang): { title: string; body: string 
   }
 }
 
+let vapidPublicCache: string | undefined;
+
 async function config(): Promise<Record<string, string>> {
   const read = async () => {
     const { data, error } = await db.rpc("push_config");
@@ -78,21 +89,26 @@ function sameSecret(a: string, b: string) {
 }
 
 const cors = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": Deno.env.get("APP_ORIGIN") ?? "*",
   "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
 };
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
   try {
-    const cfg = await config();
-    if (req.method === "GET") return Response.json({ publicKey: cfg.runset_vapid_public }, { headers: cors });
+    if (req.method === "GET") {
+      if (!vapidPublicCache) vapidPublicCache = (await config()).runset_vapid_public;
+      return Response.json({ publicKey: vapidPublicCache }, { headers: cors });
+    }
     if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
-    if (!cfg.runset_push_secret || !sameSecret(req.headers.get("Authorization") ?? "", `Bearer ${cfg.runset_push_secret}`))
+    const auth = req.headers.get("Authorization") ?? "";
+    if (!auth.startsWith("Bearer ") || auth.length < 8) return new Response("Unauthorized", { status: 401 });
+    const cfg = await config();
+    if (!cfg.runset_push_secret || !sameSecret(auth, `Bearer ${cfg.runset_push_secret}`))
       return new Response("Unauthorized", { status: 401 });
 
     const { event, subs } = (await req.json()) as { event: { id: string; type: string; data: Data }; subs: Sub[] };
-    webpush.setVapidDetails("mailto:runset.smartset@gmail.com", cfg.runset_vapid_public, cfg.runset_vapid_private);
+    webpush.setVapidDetails(Deno.env.get("VAPID_SUBJECT") ?? "mailto:runset.smartset@gmail.com", cfg.runset_vapid_public, cfg.runset_vapid_private);
     const gone: string[] = [];
     await Promise.all(
       (subs ?? []).slice(0, 200).map(async (sub) => {
